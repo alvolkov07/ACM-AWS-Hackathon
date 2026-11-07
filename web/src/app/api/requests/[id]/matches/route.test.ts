@@ -22,7 +22,6 @@ describe("/api/requests/[id]/matches", () => {
       address: "4 Grove",
       state: "CA",
       deliveryTarget: new Date("2026-11-01"),
-      defaultService: "irrigation",
     });
     const company = await createCompany({
       name: "Select Co",

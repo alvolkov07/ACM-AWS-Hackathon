@@ -28,7 +28,6 @@ describe("service-requests repository", () => {
       address: "22 Ridge Ave",
       state: "WA",
       deliveryTarget: new Date("2026-07-15"),
-      defaultService: "irrigation",
     });
 
     const created = await createServiceRequest({

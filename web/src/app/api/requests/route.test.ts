@@ -14,7 +14,6 @@ describe("/api/requests", () => {
       address: "9 Farm Rd",
       state: "OR",
       deliveryTarget: new Date("2026-09-01"),
-      defaultService: "seeds",
     });
   });
 

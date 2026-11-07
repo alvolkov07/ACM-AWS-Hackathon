@@ -11,6 +11,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // First run may download a MongoDB binary for mongodb-memory-server.
+    hookTimeout: 120_000,
+    testTimeout: 30_000,
   },
   resolve: {
     alias: {

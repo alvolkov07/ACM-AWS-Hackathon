@@ -27,7 +27,6 @@ describe("buyer-profiles repository", () => {
       address: "100 Orchard Rd",
       state: "CA",
       deliveryTarget: new Date("2026-06-01"),
-      defaultService: "irrigation",
     });
 
     const fetched = await getBuyerProfileById(created._id, userId);

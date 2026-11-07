@@ -4,12 +4,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { Field, SelectControl } from "@/components/field";
+import { Field } from "@/components/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, ApiError } from "@/lib/api";
-import { SERVICE_LABELS } from "@/lib/db/schemas/service-labels";
-import { SERVICE_TYPES } from "@/lib/db/schemas/service-type";
 
 type ProfileResponse = {
   profile: {
@@ -32,7 +30,6 @@ export function ProfileForm() {
           address: String(formData.get("address") ?? "").trim(),
           state: String(formData.get("state") ?? "").trim(),
           deliveryTarget,
-          defaultService: String(formData.get("defaultService") ?? ""),
         },
       });
       toast.success("Buyer profile created");
@@ -69,18 +66,6 @@ export function ProfileForm() {
       </Field>
       <Field label="Delivery target" htmlFor="deliveryTarget">
         <Input id="deliveryTarget" name="deliveryTarget" type="date" required />
-      </Field>
-      <Field label="Select service" htmlFor="defaultService">
-        <SelectControl id="defaultService" name="defaultService" required defaultValue="">
-          <option value="" disabled>
-            Choose a service
-          </option>
-          {SERVICE_TYPES.map((service) => (
-            <option key={service} value={service}>
-              {SERVICE_LABELS[service]}
-            </option>
-          ))}
-        </SelectControl>
       </Field>
       <Button type="submit" disabled={pending}>
         {pending ? "Saving…" : "Create agent profile"}

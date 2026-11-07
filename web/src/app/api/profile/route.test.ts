@@ -23,7 +23,6 @@ describe("/api/profile", () => {
           address: "1 Main St",
           state: "ca",
           deliveryTarget: "2026-08-01",
-          defaultService: "fertilizer",
         }),
       }),
     );
@@ -52,7 +51,6 @@ describe("/api/profile", () => {
           address: "1 Main St",
           state: "California",
           deliveryTarget: "2026-08-01",
-          defaultService: "telepathy",
         }),
       }),
     );

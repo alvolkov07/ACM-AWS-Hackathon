@@ -6,7 +6,10 @@ let memoryServer: MongoMemoryServer | null = null;
 
 /** Start an in-memory MongoDB and wire getDb() to it. */
 export async function setupTestDb(): Promise<void> {
-  memoryServer = await MongoMemoryServer.create();
+  // Pin to 7.x to match docker-compose mongo:7 (DocumentDB-compatible surface).
+  memoryServer = await MongoMemoryServer.create({
+    binary: { version: "7.0.14" },
+  });
   await connectDbForTests(memoryServer.getUri(), "agri_supply_test");
 }
 

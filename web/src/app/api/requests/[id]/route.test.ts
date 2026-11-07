@@ -18,7 +18,6 @@ describe("GET /api/requests/[id]", () => {
       address: "2 Lane",
       state: "WA",
       deliveryTarget: new Date("2026-10-01"),
-      defaultService: "transport",
     });
     const created = await createServiceRequest({
       userId: "dev-user",

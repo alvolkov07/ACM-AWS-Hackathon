@@ -10,7 +10,7 @@ export type CurrentUser = {
 
 /**
  * Returns the signed-in user for the current request.
- * Dev mode uses a fixed placeholder until Cognito lands in Stage 8.
+ * Dev mode uses a fixed placeholder until Cognito lands in Stage 9.
  */
 export function getCurrentUser(): CurrentUser {
   if (env.AUTH_MODE === "dev") {
@@ -21,5 +21,5 @@ export function getCurrentUser(): CurrentUser {
     };
   }
 
-  throw new Error("not implemented until Stage 8");
+  throw new Error("not implemented until Stage 9");
 }

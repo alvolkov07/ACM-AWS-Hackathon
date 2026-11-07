@@ -6,7 +6,6 @@ import {
   createBuyerProfile,
   getBuyerProfileForUser,
 } from "@/lib/db/repositories/buyer-profiles";
-import { serviceTypeSchema } from "@/lib/db/schemas/service-type";
 import { usStateCodeSchema } from "@/lib/db/schemas/object-id";
 
 const createProfileBodySchema = z.object({
@@ -14,7 +13,6 @@ const createProfileBodySchema = z.object({
   address: z.string().min(1),
   state: usStateCodeSchema,
   deliveryTarget: z.coerce.date(),
-  defaultService: serviceTypeSchema,
 });
 
 export async function GET() {

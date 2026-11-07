@@ -19,7 +19,6 @@ describe("POST /api/requests/[id]/match", () => {
       address: "3 Field",
       state: "CA",
       deliveryTarget: new Date("2026-12-01"),
-      defaultService: "irrigation",
     });
     const company = await createCompany({
       name: "Drip Co",

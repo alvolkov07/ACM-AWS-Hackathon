@@ -39,7 +39,7 @@ export default async function NewRequestPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <NewRequestForm defaultService={profile.defaultService} />
+          <NewRequestForm />
           <Button asChild variant="ghost">
             <Link href="/dashboard">Cancel</Link>
           </Button>
