@@ -1,0 +1,106 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agri-Supply</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;background:#f4f6f1;color:#222}
+header{background:#2f6b3a;color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+main{max-width:900px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:10px;padding:14px;margin:12px 0;box-shadow:0 1px 3px #0002}
+input,textarea{width:100%;box-sizing:border-box;padding:9px;margin:4px 0;border:1px solid #bbb;border-radius:6px;font:inherit}
+button{background:#2f6b3a;color:#fff;border:0;border-radius:6px;padding:9px 14px;cursor:pointer;margin:4px 4px 4px 0}
+button.alt{background:#777}
+.wf{display:inline-block;background:#e3eddc;padding:6px 10px;border-radius:14px;margin:3px;cursor:pointer}
+.msg{padding:8px;border-radius:8px;margin:6px 0;white-space:pre-wrap}
+.user{background:#e3eddc}.bot{background:#eef}
+small{color:#666}
+</style></head><body>
+<header><b>🌾 Agri-Supply</b><span id="who"></span></header>
+<main id="app"></main>
+<script>
+let token = localStorage.token || "", me = null, wid = null;
+const $ = s => document.querySelector(s);
+const esc = s => (s ?? "").toString().replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function api(path, method = "GET", body) {
+  const r = await fetch("/api" + path, {method, headers: {"Content-Type": "application/json", Authorization: "Bearer " + token}, body: body ? JSON.stringify(body) : undefined});
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || r.statusText); }
+  return r.json();
+}
+const run = fn => async (...a) => { try { await fn(...a); } catch (e) { alert(e.message); } };
+
+// ---------- auth ----------
+function authView() {
+  $("#who").innerHTML = "";
+  $("#app").innerHTML = `
+  <div class="card"><h3>Welcome</h3>
+    <input id="u" placeholder="Username"><input id="p" type="password" placeholder="Password">
+    <button onclick="login()">Log in</button></div>
+  <div class="card"><h3>Register a new account</h3>
+    <input id="ru" placeholder="Username"><input id="rp" type="password" placeholder="Password">
+    <input id="re" placeholder="Email"><input id="rf" placeholder="Farm name"><input id="rl" placeholder="Farm location">
+    <button onclick="register()">Create account</button></div>`;
+}
+const login = run(async () => { token = (await api("/login", "POST", {username: $("#u").value, password: $("#p").value})).token; localStorage.token = token; home(); });
+const register = run(async () => { token = (await api("/register", "POST", {username: $("#ru").value, password: $("#rp").value, email: $("#re").value, farm_name: $("#rf").value, farm_location: $("#rl").value})).token; localStorage.token = token; home(); });
+function logout() { localStorage.removeItem("token"); token = ""; authView(); }
+
+// ---------- home ----------
+const home = run(async () => {
+  me = await api("/me"); wid = null;
+  $("#who").innerHTML = `${esc(me.username)} · <a href="#" style="color:#fff" onclick="logout()">log out</a>`;
+  const wfs = await api("/workflows");
+  $("#app").innerHTML = `
+  <div class="card"><h3>Welcome back, ${esc(me.username)}!</h3>
+    <p><small>Describe what your farm needs (e.g. "we need irrigation service")</small></p>
+    <textarea id="prompt" rows="2" placeholder="We need ... service"></textarea>
+    <button onclick="newWf()">Find companies</button></div>
+  <div class="card"><h3>My workflows</h3>
+    ${wfs.map(w => `<span class="wf" onclick="openWf('${w._id}')">${esc(w.title)}</span>`).join("") || "<small>None yet</small>"}</div>`;
+});
+const newWf = run(async () => { const d = await api("/workflows", "POST", {prompt: $("#prompt").value}); wid = d.workflow._id; render(d); });
+const openWf = run(async id => { wid = id; render(await api("/workflows/" + id)); });
+
+// ---------- workflow view ----------
+function render(d) {
+  const w = d.workflow;
+  $("#app").innerHTML = `
+  <p><a href="#" onclick="home()">← Home</a></p>
+  <div class="card"><h3>${esc(w.title)}</h3><small>${esc(w.prompt)} · service: <b>${esc(w.service) || "no match"}</b></small></div>
+  <div class="card"><h3>1. Companies (best rated first)</h3>
+    ${d.companies.map(c => `<label style="display:block;margin:6px 0"><input type="checkbox" style="width:auto" class="co" value="${c._id}">
+      <b>${esc(c.name)}</b> ⭐${c.rating} <small>${esc(c.state)} · ${esc(c.services.join(", "))}</small></label>`).join("") || "<small>No companies found for this service.</small>"}
+    <textarea id="details" rows="2" placeholder="Extra details for the email (quantity, dates, budget...)"></textarea>
+    <button onclick="draft()">Draft emails for selected</button></div>
+  <div class="card"><h3>2. Emails (review &amp; edit before sending)</h3>
+    ${d.emails.map(emailCard).join("") || "<small>No drafts yet</small>"}</div>
+  <div class="card"><h3>3. Report &amp; chat (uses email history)</h3>
+    <div id="chat">${(w.chat || []).map(m => `<div class="msg ${m.role == "user" ? "user" : "bot"}">${esc(m.content)}</div>`).join("")}</div>
+    <input id="msg" placeholder="Ask about your emails / replies...">
+    <button onclick="send()">Send</button>
+    <button class="alt" onclick="send('Write a short report comparing the companies, their replies, and recommend the best option.')">Generate report</button></div>`;
+}
+function emailCard(e) {
+  return `<div style="border-top:1px solid #ddd;padding-top:8px">
+    <b>${esc(e.company_name)}</b> &lt;${esc(e.to)}&gt; — <small>${esc(e.status)}</small>
+    <input id="s${e._id}" value="${esc(e.subject)}"><textarea id="b${e._id}" rows="6">${esc(e.body)}</textarea>
+    <button onclick="saveEmail('${e._id}')">Save</button>
+    <button onclick="sendEmail('${e._id}')">Approve &amp; send</button>
+    <input id="r${e._id}" value="${esc(e.reply)}" placeholder="Paste company's reply here">
+    <button class="alt" onclick="saveReply('${e._id}')">Save reply</button></div>`;
+}
+const draft = run(async () => {
+  const ids = [...document.querySelectorAll(".co:checked")].map(c => c.value);
+  if (!ids.length) return alert("Select at least one company");
+  await api(`/workflows/${wid}/drafts`, "POST", {company_ids: ids, details: $("#details").value}); openWf(wid);
+});
+const saveEmail = run(async id => { await api("/emails/" + id, "PUT", {subject: $("#s" + id).value, body: $("#b" + id).value}); alert("Saved"); });
+const sendEmail = run(async id => { await saveEmail(id); const r = await api(`/emails/${id}/send`, "POST"); alert("Status: " + r.status); openWf(wid); });
+const saveReply = run(async id => { await api(`/emails/${id}/reply`, "POST", {text: $("#r" + id).value}); alert("Reply saved"); });
+const send = run(async text => {
+  const t = text || $("#msg").value; if (!t) return;
+  $("#chat").insertAdjacentHTML("beforeend", `<div class="msg user">${esc(t)}</div><div class="msg bot">…</div>`);
+  const r = await api(`/workflows/${wid}/chat`, "POST", {prompt: t}); openWf(wid);
+});
+
+token ? home() : authView();
+</script></body></html>
