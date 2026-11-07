@@ -1,0 +1,58 @@
+---
+description: Project stack, conventions, and AI rules for the Eagle monorepo
+alwaysApply: true
+---
+
+# Agent guidance
+
+This file tells AI coding assistants how to work in this repository. Prefer simplicity and clear explanations — the team is new to AWS and web development.
+
+**Product:** Agri-Supply Agent — a farm or agri-business tells an AI agent what service it needs; the agent finds and ranks supplier companies and products from our database, then drafts emails to the chosen companies that the user edits and approves before anything is sent.
+
+## Stack
+
+| Layer | Choice |
+| --- | --- |
+| Frontend / app | Next.js (App Router) + TypeScript + Tailwind CSS + shadcn/ui |
+| API | Next.js route handlers (same app; no separate backend service yet) |
+| Database | MongoDB via the official `mongodb` Node driver. Locally: `mongo:7` Docker image. In AWS: Amazon DocumentDB (MongoDB-compatible). Every document shape is a Zod schema. |
+| AI agent | Claude on Amazon Bedrock via the Converse API with tool use (`@aws-sdk/client-bedrock-runtime`). `AI_MODE=mock` returns canned responses so the app and tests run without AWS. |
+| Email | Amazon SES via `@aws-sdk/client-sesv2`. `EMAIL_MODE=log` prints emails to the console instead of sending. |
+| Auth | AWS Cognito |
+| File uploads | Amazon S3 (stretch goal) |
+| Infrastructure | AWS CDK v2 in TypeScript, living in `infra/` as its own npm package (separate `package.json` from `web/`) |
+| Hosting | Docker container on one Amazon EC2 instance, with Amazon CloudFront in front for HTTPS |
+| CI/CD | GitHub Actions |
+
+## Conventions
+
+- **Strict TypeScript** — enable strict mode; never use `any`.
+- **Config via environment variables** — validate them with Zod at startup. Never hardcode secrets or commit real credentials.
+- **Validate every API input** — every route handler parses request bodies/query params with Zod.
+- **Test every new API route** — add a test when you add a route.
+- **Keep files small** — prefer focused modules over large “god” files.
+- **Comments explain WHY** — write short comments for non-obvious decisions, not for what the code already says.
+
+## Product rules
+
+- **Never send an email without explicit user approval** stored in the database.
+- **The AI agent may read data and save suggestions**, but it has **no tool that sends email or deletes data**.
+- **All AI and email calls go through `src/lib/ai/` and `src/lib/email/` only** — nowhere else in the app.
+
+## Infrastructure rules
+
+- **Terraform is banned** — no `.tf` or `.tfvars` files, no Terraform CLI, and no Terraform-based tools (CDKTF, OpenTofu, Terragrunt).
+- **All AWS resources are defined in `infra/` with CDK.** Nothing is created by hand in the console, except the one-time steps listed in `docs/deploy.md`.
+- **Prefer CDK L2 constructs** over raw `Cfn*` resources.
+- **Every stateful resource** (database, secrets) sets an explicit `removalPolicy` with a comment saying why.
+- **Pass values between stacks with stack props**, not hardcoded ARNs.
+- **Grant permissions with CDK grant methods** (e.g. `secret.grantRead`) before writing IAM policy statements by hand.
+
+## Rules for the AI
+
+1. **Explain changes in plain language** — assume the reader is new to the stack.
+2. **Never run `cdk deploy`, `cdk destroy`, or `cdk bootstrap`** — a human runs those. You may run `cdk synth` freely and `cdk diff` only when the human asks.
+3. **Never read or write real AWS credentials** — do not touch `~/.aws/credentials`, access keys, or secret values in chat or files.
+4. **Never edit `.env` files** — only create or update `.env.example` with placeholder values.
+5. **Ask before adding any new dependency or AWS service** — keep the surface area small for a hackathon.
+6. **Never call real Bedrock or SES from tests** — always use the mock modes (`AI_MODE=mock`, `EMAIL_MODE=log`).

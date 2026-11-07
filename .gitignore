@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+infra/node_modules/
+
+# Next.js
+.next/
+
+# Environment files (keep examples)
+.env
+.env.*
+!.env.example
+
+# AWS CDK
+cdk.out/
+# Do NOT ignore cdk.context.json — CDK caches account/region lookups there and the team should commit it.
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Tests / coverage
+coverage/
+*.tsbuildinfo
