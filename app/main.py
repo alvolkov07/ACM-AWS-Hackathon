@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
-from pymongo.errors import OperationFailure
+from pymongo.errors import DuplicateKeyError, OperationFailure
  
 logger = logging.getLogger("agri_supply")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -48,7 +48,8 @@ def model_for(task):
     if forced:
         return forced
     env, default = TIER_ENV[task]
-    tier = os.getenv(env, default).lower()
+    tier = os.getenv(env) or os.getenv("CLAUDE_TIER") or default
+    tier = tier.strip().lower()
     model = MODEL_IDS.get(tier, MODEL_IDS[default]).get(PROVIDER)
     if not model:
         raise RuntimeError("Set CLAUDE_MODEL when USE_BEDROCK=1")
@@ -145,6 +146,17 @@ def own(coll, id, u):
     if not doc:
         raise HTTPException(404, "Not found")
     return doc
+
+
+def object_ids(values):
+    """Convert stored IDs without letting one corrupt value break a workflow."""
+    ids = []
+    for value in values or []:
+        try:
+            ids.append(ObjectId(value))
+        except (TypeError, ValueError):
+            logger.warning("Ignoring invalid stored ObjectId: %r", value)
+    return ids
  
  
 # ---------- models ----------
@@ -245,11 +257,30 @@ def serp(params):
  
  
 STATE_ZIP = re.compile(r"\b([A-Z]{2})\s+\d{5}(?:-\d{4})?\b")
+US_STATE_CODES = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID",
+    "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS",
+    "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK",
+    "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
+    "WI", "WY",
+}
  
  
 def address_state(address):
     m = STATE_ZIP.search(address or "")
-    return m.group(1) if m else ""
+    if m:
+        return m.group(1)
+    parts = re.findall(r"\b[A-Z]{2}\b", (address or "").upper())
+    return next((part for part in parts if part in US_STATE_CODES), "")
+
+
+def number(value, default=0.0):
+    try:
+        if isinstance(value, str):
+            value = value.replace(",", "").strip()
+        return float(value)
+    except (TypeError, ValueError):
+        return default
  
  
 def serp_places(query, lat, lon, state, with_ll=True):
@@ -261,7 +292,8 @@ def serp_places(query, lat, lon, state, with_ll=True):
     out = []
     for p in raw:
         gps = p.get("gps_coordinates") or {}
-        if not p.get("title") or "latitude" not in gps:
+        place_id = p.get("place_id") or p.get("data_id")
+        if not p.get("title") or not place_id or "latitude" not in gps or "longitude" not in gps:
             continue
         if p.get("permanently_closed") or p.get("temporarily_closed"):
             continue
@@ -269,7 +301,7 @@ def serp_places(query, lat, lon, state, with_ll=True):
         if address_state(addr) != state:  # only businesses in the farmer's state
             continue
         out.append({
-            "place_id": p.get("place_id") or p.get("data_id"),
+            "place_id": place_id,
             "data_id": p.get("data_id", ""),
             "name": p["title"],
             "address": addr,
@@ -280,9 +312,9 @@ def serp_places(query, lat, lon, state, with_ll=True):
             "website": p.get("website", ""),
             "category": p.get("type", ""),
             "hours": p.get("operating_hours") or p.get("hours", ""),
-            "rating": float(p.get("rating") or 0),
-            "review_count": int(p.get("reviews") or 0),
-            "maps_url": f"https://www.google.com/maps/place/?q=place_id:{p['place_id']}" if p.get("place_id") else "",
+            "rating": number(p.get("rating")),
+            "review_count": int(number(p.get("reviews"))),
+            "maps_url": f"https://www.google.com/maps/place/?q=place_id:{place_id}",
         })
     return out
  
@@ -455,19 +487,22 @@ def register(r: Register):
     if db.users.find_one({"username": r.username}):
         raise HTTPException(400, "Username taken")
     salt, token = secrets.token_hex(8), secrets.token_hex(24)
-    db.users.insert_one({
-        **r.model_dump(exclude={"password"}),
-        **location,
-        "salt": salt,
-        "password": hash_pw(r.password, salt),
-        "token_hash": hash_token(token),
-    })
+    try:
+        db.users.insert_one({
+            **r.model_dump(exclude={"password"}),
+            **location,
+            "salt": salt,
+            "password": hash_pw(r.password, salt),
+            "token_hash": hash_token(token),
+        })
+    except DuplicateKeyError:
+        raise HTTPException(400, "Username taken")
     return {"token": token}
  
  
 @app.post("/api/login")
 def login(r: Login):
-    u = db.users.find_one({"username": r.username})
+    u = db.users.find_one({"username": r.username.strip()})
     if not u or not hmac.compare_digest(u["password"], hash_pw(r.password, u["salt"])):
         raise HTTPException(401, "Wrong username or password")
     token = secrets.token_hex(24)
@@ -516,7 +551,7 @@ def list_workflows(u=Depends(user)):
 @app.get("/api/workflows/{wid}")
 def get_workflow(wid: str, u=Depends(user)):
     w = own("workflows", wid, u)
-    ids = [ObjectId(i) for i in w.get("company_ids", [])]
+    ids = object_ids(w.get("company_ids"))
     companies = list(db.companies.find({"_id": {"$in": ids}}).sort([("trust_score", -1)]))
     emails = list(db.emails.find({"workflow_id": wid}))
     return clean({"workflow": w, "companies": companies, "emails": emails})
@@ -637,7 +672,7 @@ def chat(wid: str, b: Prompt, u=Depends(user)):
     w = own("workflows", wid, u)
     emails = list(db.emails.find({"workflow_id": wid}))
     companies = {str(c["_id"]): c for c in db.companies.find(
-        {"_id": {"$in": [ObjectId(i) for i in w.get("company_ids", [])]}})}
+        {"_id": {"$in": object_ids(w.get("company_ids"))}})}
  
     def profile(e):
         c = companies.get(e["company_id"], {})
