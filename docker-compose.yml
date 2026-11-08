@@ -1,12 +1,27 @@
 services:
-  api:
-    # Python API lives in backend/, the HTML front-end in frontend/. The build
-    # context is the repo root so the image can include both; the API serves
-    # the front-end at / and /static.
+  # Next.js front-end: the public site on port 80. It forwards /api requests
+  # to the api service over Docker's internal network.
+  web:
     build:
-      context: .
-      dockerfile: backend/Dockerfile
-    ports: ["80:8000"]
+      context: ./frontend
+      args:
+        # Baked into the build; must match the api service name and port below.
+        API_URL: http://api:8000
+    ports: ["80:3000"]
+    depends_on:
+      - api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Python API (FastAPI). Not published to the host; only web talks to it.
+  api:
+    build: ./backend
+    expose: ["8000"]
     env_file: .env
     # AI settings read by app/config.py and app/ai.py. Values come from .env;
     # the defaults here apply when a value is missing there.

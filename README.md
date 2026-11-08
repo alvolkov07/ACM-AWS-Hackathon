@@ -11,6 +11,10 @@ Flow (from the whiteboard):
     docker compose up --build
 Open http://localhost (or your EC2 public IP; open port 80 in the security group).
 
+This starts two containers: `web` (the Next.js site, published on port 80) and
+`api` (FastAPI, only reachable inside Docker). The site forwards every `/api`
+request to the API, so the browser only ever talks to port 80.
+
 The app remains usable without an AI key: service matching and email drafting use
 safe rule-based fallbacks. Configure Bedrock or Anthropic to enable AI-generated
 matching, drafts, and reports.
@@ -60,8 +64,14 @@ From the repository root:
       CLAUDE_MODEL=anthropic.claude-3-5-haiku-20241022-v1:0 \
       uvicorn app.main:app --app-dir backend --reload
 
-The API serves the front-end from `frontend/` automatically. Set
-`FRONTEND_DIR` only if the front-end lives somewhere else.
+Then, in a second terminal, start the front-end (needs Node 22 and pnpm):
+
+    cd frontend
+    pnpm install
+    pnpm dev
+
+Open http://localhost:3000. The dev server forwards `/api` to
+`http://localhost:8000`; set `API_URL` to use a different backend address.
 
 ## AWS EC2 deployment
 1. Create a MongoDB Atlas database and allow the EC2 instance's outbound access.
@@ -73,13 +83,13 @@ The API serves the front-end from `frontend/` automatically. Set
 7. Open the instance's public IPv4 address in a browser.
 
 ## Files
-The Python API and the HTML front-end live in separate top-level folders.
+The Python API and the Next.js front-end live in separate top-level folders.
 
     backend/                Python API (FastAPI)
-      Dockerfile            image build; context is the repo root
+      Dockerfile            API image build
       requirements.txt      Python dependencies
       app/
-        main.py             FastAPI app: wires routers, startup, serves the front-end
+        main.py             FastAPI app: wires routers and startup (API only)
         config.py           environment settings, logging, Claude model selection
         database.py         MongoDB connection and indexes
         ai.py               Claude client and prompt helpers
@@ -92,16 +102,24 @@ The Python API and the HTML front-end live in separate top-level folders.
         suppliers.py        supplier search and caching
         utils.py            shared helpers
         routes/             API endpoints (auth, workflows, emails, health)
-    frontend/
-      index.html            whole front-end (served at / and /static)
-    docker-compose.yml      builds backend/Dockerfile into one API container;
+    frontend/               Next.js + Tailwind front-end (TypeScript)
+      Dockerfile            standalone Next.js server image
+      next.config.ts        forwards /api to the backend (API_URL)
+      public/               logos and the hero background photo
+      src/app/              pages: landing, login, signup, setup-location,
+                            dashboard, workflows/[id]
+      src/components/       shared UI, app shell, workflow steps
+      src/lib/              API client, types, formatting helpers
+      old/index.html        previous single-file front-end, kept for reference
+    docker-compose.yml      web (Next.js, port 80) + api (FastAPI, internal);
                             MongoDB is external (Atlas)
 
 ## Troubleshooting
 - `Authentication failed`: reset the MongoDB Atlas database-user password and
   copy the complete URI from Atlas **Connect → Drivers** into `.env`.
-- `Connection refused`: run `docker compose ps -a` and
-  `docker compose logs --tail=100 api`.
+- `Connection refused` or "Can't reach the Eagle server": run
+  `docker compose ps -a`, then `docker compose logs --tail=100 api` and
+  `docker compose logs --tail=100 web`.
 - Do not commit `.env`; it contains credentials and is ignored by Git.
 
 ## Not in MVP (next steps)

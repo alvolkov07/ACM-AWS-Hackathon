@@ -28,7 +28,6 @@ export default function HeroBackground({
         priority={priority}
         placeholder="blur"
         sizes={sizes}
-        quality={80}
         className="object-cover"
         style={{ objectPosition: position }}
       />
