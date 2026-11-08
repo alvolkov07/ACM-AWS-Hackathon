@@ -40,11 +40,39 @@ class Prompt(BaseModel):
         default="local",
         description="local | statewide | nationwide | international",
     )
+    budget_min: float | None = Field(
+        default=None,
+        ge=0,
+        le=1_000_000,
+        description="Minimum budget in USD (optional)",
+    )
+    budget_max: float | None = Field(
+        default=None,
+        ge=0,
+        le=1_000_000,
+        description="Maximum budget in USD (optional)",
+    )
 
     @property
     def scope(self) -> str:
         s = self.search_scope.strip().lower()
         return s if s in VALID_SCOPES else "local"
+
+    @property
+    def budget_label(self) -> str:
+        """Human-readable budget string for use in prompts and emails."""
+        lo, hi = self.budget_min, self.budget_max
+        if lo is not None and hi is not None:
+            return f"${lo:,.0f}–${hi:,.0f}"
+        if hi is not None:
+            return f"up to ${hi:,.0f}"
+        if lo is not None:
+            return f"starting around ${lo:,.0f}"
+        return ""
+
+    @property
+    def has_budget(self) -> bool:
+        return self.budget_min is not None or self.budget_max is not None
 
 
 class DraftReq(BaseModel):

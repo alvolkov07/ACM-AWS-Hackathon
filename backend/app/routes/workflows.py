@@ -16,20 +16,34 @@ router = APIRouter(prefix="/api/workflows")
 def start_workflow(b: Prompt, u=Depends(user)):
     if not u.get("farm_state"):
         raise HTTPException(409, "Add your farm location before finding suppliers")
-    scope = b.scope  # local | statewide | nationwide | international
+    scope = b.scope
+    budget_label = b.budget_label  # e.g. "$500–$1,500" or "" if not set
+
+    budget_hint = f" The farmer's budget is {budget_label}." if budget_label else ""
     info = ask_json(
         "A farmer describes what they need for their farm. Turn it into a short Google Maps search phrase for the "
         "kind of local business that would provide it (e.g. 'irrigation contractor', 'farm equipment repair', "
         "'agricultural seed supplier'). Reply ONLY JSON: "
         '{"query": "<2-5 word business search>", "service": "<1-3 word service label>", "title": "<3-5 word title>"}',
-        b.prompt, {"query": b.prompt[:60], "service": b.prompt[:30], "title": b.prompt[:40]})
+        b.prompt + budget_hint,
+        {"query": b.prompt[:60], "service": b.prompt[:30], "title": b.prompt[:40]})
     query = str(info.get("query") or b.prompt[:60]).strip()[:80]
     service = str(info.get("service") or query).strip()[:60]
-    companies = search_companies(query, u, scope=scope)
-    w = {"user_id": str(u["_id"]), "prompt": b.prompt, "title": str(info.get("title") or b.prompt[:40])[:80],
-         "service": service, "search_query": query, "search_scope": scope,
-         "company_ids": [str(c["_id"]) for c in companies],
-         "chat": [], "created": now()}
+    companies = search_companies(query, u, scope=scope, budget_label=budget_label)
+    w = {
+        "user_id": str(u["_id"]),
+        "prompt": b.prompt,
+        "title": str(info.get("title") or b.prompt[:40])[:80],
+        "service": service,
+        "search_query": query,
+        "search_scope": scope,
+        "budget_min": b.budget_min,
+        "budget_max": b.budget_max,
+        "budget_label": budget_label,
+        "company_ids": [str(c["_id"]) for c in companies],
+        "chat": [],
+        "created": now(),
+    }
     w["_id"] = db.workflows.insert_one(w).inserted_id
     return clean({"workflow": w, "companies": companies, "emails": []})
 
@@ -66,6 +80,12 @@ def make_drafts(wid: str, b: DraftReq, u=Depends(user)):
         farm = u.get("farm_name") or "our farm"
         place = u.get("farm_display_name") or u.get("farm_location") or "our local area"
         extra = f"{b.details.strip()}\n\n" if b.details.strip() else ""
+        budget_label = w.get("budget_label", "")
+        budget_line = (
+            f"Our budget for this project is {budget_label}. We are a small family farm "
+            f"and are looking for fair, transparent pricing within this range.\n\n"
+            if budget_label else ""
+        )
         fallback = {
             "subject": f"Request for a Quote: {w['service'].title()} - {farm}",
             "body": (
@@ -74,6 +94,7 @@ def make_drafts(wid: str, b: DraftReq, u=Depends(user)):
                 f"{farm}, located in {place}. I came across your business and was impressed by your reputation "
                 "in our area, so I wanted to reach out directly.\n\n"
                 f"We are currently looking for help with the following: {w['prompt']}\n\n"
+                f"{budget_line}"
                 f"{extra}"
                 "Would you be able to provide a written estimate? It would be very helpful to know what the "
                 "quote includes, your expected timeline, any warranty or service terms, and your earliest "
@@ -86,16 +107,20 @@ def make_drafts(wid: str, b: DraftReq, u=Depends(user)):
             ).strip(),
         }
         d = ask_json(
-            "You write warm, courteous, professional procurement emails on behalf of a farmer. Write a quote "
-            "request of 5 short paragraphs: (1) polite greeting and brief introduction of the farmer and farm, "
-            "(2) a specific, genuine reason for contacting this company, (3) clear description of the need and any "
-            "extra details provided, (4) the information requested (itemized estimate, timeline, warranty/terms, "
-            "availability, site visit if needed), (5) a gracious thank-you and close. Never invent facts, prices, "
-            "or details not provided. Sign with the farmer's name, farm and email. "
+            "You write warm, courteous, professional procurement emails on behalf of a small low-income farmer. "
+            "Write a quote request of 5 short paragraphs: (1) polite greeting and brief introduction of the "
+            "farmer and farm, (2) a specific, genuine reason for contacting this company, (3) clear description "
+            "of the need and any extra details provided, (4) the information requested — itemized estimate, "
+            "timeline, warranty/terms, availability, site visit if needed"
+            + (f", and whether services are available within a {budget_label} budget" if budget_label else "")
+            + ", (5) a gracious thank-you and close. Never invent facts, prices, or details not provided. "
+            "Sign with the farmer's name, farm and email. "
             'Reply ONLY JSON: {"subject": "...", "body": "..."}',
             f"Farmer: {u['username']} ({u['email']})\nFarm: {u.get('farm_name') or 'n/a'} in {place}\n"
             f"Company: {c['name']} ({c.get('address', '')}), rated {c.get('rating')}/5 on Google\n"
-            f"Need: {w['prompt']}\nExtra details: {b.details or 'none'}",
+            f"Need: {w['prompt']}\n"
+            + (f"Budget: {budget_label}\n" if budget_label else "")
+            + f"Extra details: {b.details or 'none'}",
             fallback, max_tokens=1800, task="smart")
         subject = str(d.get("subject") or fallback["subject"])[:200]
         body = str(d.get("body") or fallback["body"])
