@@ -2,7 +2,7 @@
 
 Flow (from the whiteboard):
 1. Register / log in (farm name + location saved).
-2. Prompt: "we need X service" -> Claude maps it to a service -> companies from MongoDB, ranked by rating.
+2. The farm location is geocoded to coordinates and a state; suppliers are filtered to that same state and ranked by trust.
 3. Pick companies -> Claude drafts emails -> you edit & approve -> send (SMTP, or simulated if not configured).
 4. Workflow 2: log company replies, then chat / generate a report from the email history.
 
@@ -14,6 +14,11 @@ Open http://localhost (or your EC2 public IP; open port 80 in the security group
 The app remains usable without an AI key: service matching and email drafting use
 safe rule-based fallbacks. Configure Bedrock or Anthropic to enable AI-generated
 matching, drafts, and reports.
+
+Farm locations are geocoded through OpenStreetMap Nominatim at registration or
+profile completion. The app stores the resolved latitude, longitude, state, and
+display name in MongoDB. Supplier recommendations only include companies in the
+farm's resolved state.
 
 Set `CLAUDE_TIER` to `haiku`, `sonnet`, or `opus` to choose the model family.
 Use `CLAUDE_MODEL` when your provider exposes a different model ID. Supplier

@@ -273,6 +273,11 @@ async function api(path, method = "GET", body){
     method, headers:{"Content-Type":"application/json", Authorization:"Bearer " + token},
     body: body ? JSON.stringify(body) : undefined
   });
+  if(r.status === 401){
+    localStorage.removeItem("token"); token = ""; me = null;
+    authView();
+    throw new Error("Your session expired. Please log in again.");
+  }
   if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.detail || r.statusText); }
   return r.json();
 }
@@ -349,6 +354,20 @@ function logout(){ localStorage.removeItem("token"); token=""; me=null; authView
 /* ================= APP SHELL ================= */
 async function shell(){
   me = await api("/me");
+  if(!me.farm_state){
+    document.body.classList.add("has-app");
+    $("#root").innerHTML = `
+    <div class="auth-screen"><div class="auth-panel" style="width:100%;max-width:620px">
+      <div class="auth-box">
+        <h3>Tell us where your farm is 📍</h3>
+        <p class="sub">We use your farm location to show suppliers from the same state. Your location is converted to coordinates for matching.</p>
+        <label>Farm location</label>
+        <input id="locationSetup" placeholder="Fresno, CA or a farm address">
+        <button class="btn" onclick="saveLocation()">Save location →</button>
+      </div>
+    </div></div>`;
+    return null;
+  }
   const wfs = await api("/workflows");
   $("#root").innerHTML = `
   <div class="shell">
@@ -366,6 +385,10 @@ async function shell(){
   </div>`;
   return wfs;
 }
+const saveLocation = run(async () => {
+  await api("/me/location", "PUT", {farm_location: $("#locationSetup").value.trim()});
+  await home();
+});
 
 function renderFlows(wfs){
   if(!wfs.length) return `<div class="flows-empty">🌰 No workflows yet.<br>Start one from the home page.</div>`;
@@ -405,6 +428,7 @@ const SAMPLE_CHIPS = [
 const home = run(async () => {
   wid = null;
   const wfs = await shell();
+  if(!wfs) return;
   refreshSidebar(wfs);
   const hour = new Date().getHours();
   const greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";

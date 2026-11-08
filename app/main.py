@@ -6,6 +6,8 @@ import os
 import re
 import secrets
 import smtplib
+import urllib.parse
+import urllib.request
 from email.message import EmailMessage
 from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -104,7 +106,7 @@ class Register(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     email: str = Field(min_length=3, max_length=254)
     farm_name: str = Field(default="", max_length=100)
-    farm_location: str = Field(default="", max_length=200)
+    farm_location: str = Field(min_length=3, max_length=200)
 class Login(BaseModel):
     username: str = Field(min_length=1, max_length=50)
     password: str = Field(min_length=1, max_length=128)
@@ -118,6 +120,8 @@ class EmailEdit(BaseModel):
     body: str = Field(min_length=1, max_length=10000)
 class Reply(BaseModel):
     text: str = Field(min_length=1, max_length=10000)
+class FarmLocation(BaseModel):
+    farm_location: str = Field(min_length=3, max_length=200)
 class Company(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     email: str = Field(min_length=3, max_length=254)
@@ -130,6 +134,35 @@ class Company(BaseModel):
     reliability_score: float = Field(default=3.0, ge=0, le=5)
     verified: bool = False
 
+def geocode_location(location):
+    query = urllib.parse.urlencode({"q": location, "format": "jsonv2", "addressdetails": 1, "limit": 1})
+    request = urllib.request.Request(
+        f"https://nominatim.openstreetmap.org/search?{query}",
+        headers={"User-Agent": os.getenv("GEOCODING_USER_AGENT", "agri-supply-mvp/1.0")},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            results = json.load(response)
+    except Exception as exc:
+        logger.warning("Geocoding request failed: %s", exc)
+        raise HTTPException(503, "Location lookup is temporarily unavailable")
+    if not results:
+        raise HTTPException(422, "We could not find that farm location. Include a city and state.")
+    result = results[0]
+    address = result.get("address", {})
+    state_code = address.get("ISO3166-2-lvl4", "").split("-")[-1].upper()
+    if not state_code:
+        state_code = address.get("state_code", "").upper()
+    if not state_code or len(state_code) != 2:
+        raise HTTPException(422, "Please provide a location in a US state.")
+    return {
+        "farm_location": location,
+        "farm_display_name": result.get("display_name", location),
+        "farm_latitude": float(result["lat"]),
+        "farm_longitude": float(result["lon"]),
+        "farm_state": state_code,
+    }
+
 # ---------- auth ----------
 @app.post("/api/register")
 def register(r: Register):
@@ -137,9 +170,16 @@ def register(r: Register):
     r.email = r.email.strip().lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", r.email):
         raise HTTPException(422, "Enter a valid email address")
+    location = geocode_location(r.farm_location.strip())
     if db.users.find_one({"username": r.username}): raise HTTPException(400, "Username taken")
     salt, token = secrets.token_hex(8), secrets.token_hex(24)
-    db.users.insert_one({**r.model_dump(exclude={"password"}), "salt": salt, "password": hash_pw(r.password, salt), "token": token})
+    db.users.insert_one({
+        **r.model_dump(exclude={"password"}),
+        **location,
+        "salt": salt,
+        "password": hash_pw(r.password, salt),
+        "token": token,
+    })
     return {"token": token}
 
 @app.post("/api/login")
@@ -153,9 +193,17 @@ def login(r: Login):
 @app.get("/api/me")
 def me(u=Depends(user)): return clean(u)
 
+@app.put("/api/me/location")
+def update_location(r: FarmLocation, u=Depends(user)):
+    location = geocode_location(r.farm_location.strip())
+    db.users.update_one({"_id": u["_id"]}, {"$set": location})
+    return clean({**u, **location})
+
 # ---------- workflow 1: find service -> companies ----------
 @app.post("/api/workflows")
 def start_workflow(b: Prompt, u=Depends(user)):
+    if not u.get("farm_state"):
+        raise HTTPException(409, "Add your farm location before finding suppliers")
     known = db.companies.distinct("services")
     if not known:
         raise HTTPException(503, "Company catalog is unavailable")
@@ -167,7 +215,7 @@ def start_workflow(b: Prompt, u=Depends(user)):
     if service not in known:
         terms = set(re.findall(r"[a-z0-9]+", b.prompt.lower()))
         service = max(known, key=lambda item: len(terms & set(item.lower().split()))) if known else ""
-    companies = list(db.companies.find({"services": service}).sort(
+    companies = list(db.companies.find({"services": service, "state": u["farm_state"]}).sort(
         [("trust_score", -1), ("rating", -1), ("review_count", -1)]
     ))
     w = {"user_id": str(u["_id"]), "prompt": b.prompt, "title": info.get("title", b.prompt[:40]),
@@ -182,7 +230,7 @@ def list_workflows(u=Depends(user)):
 @app.get("/api/workflows/{wid}")
 def get_workflow(wid: str, u=Depends(user)):
     w = own("workflows", wid, u)
-    companies = list(db.companies.find({"services": w["service"]}).sort(
+    companies = list(db.companies.find({"services": w["service"], "state": u.get("farm_state")}).sort(
         [("trust_score", -1), ("rating", -1), ("review_count", -1)]
     ))
     emails = list(db.emails.find({"workflow_id": wid}))
@@ -298,6 +346,7 @@ def chat(wid: str, b: Prompt, u=Depends(user)):
 def add_company(c: Company, u=Depends(user)):
     company = c.model_dump()
     company["services"] = [service.strip().lower() for service in company["services"] if service.strip()]
+    company["trust_score"] = trust_score(company)
     return {"id": str(db.companies.insert_one(company).inserted_id)}
 
 SEED = [
@@ -363,6 +412,7 @@ def trust_score(company):
 def seed():
     db.users.create_index("username", unique=True)
     db.emails.create_index([("workflow_id", 1), ("company_id", 1)])
+    db.companies.create_index([("state", 1), ("services", 1), ("trust_score", -1)])
     for company in SEED:
         company = {**company, "trust_score": trust_score(company), "demo_data": True}
         db.companies.update_one({"name": company["name"]}, {"$set": company}, upsert=True)
