@@ -19,24 +19,34 @@ def save_company(c):
     return db.companies.find_one({"place_id": c["place_id"]})
 
 
-def search_companies(query, u):
-    """Find real businesses near the farm (same state), cache them, enrich the best ones."""
+def search_companies(query, u, scope="local"):
+    """Find real businesses based on scope, cache them, enrich the best ones."""
     state = u["farm_state"]
     lat, lon = u["farm_latitude"], u["farm_longitude"]
-    key = f"{query.lower()}|{state}|{round(lat, 1)}|{round(lon, 1)}"
+    key = f"{query.lower()}|{scope}|{state}|{round(lat, 1)}|{round(lon, 1)}"
     cached = db.searches.find_one({"key": key})
     if cached and datetime.now(timezone.utc) - cached["at"] < SEARCH_CACHE:
         found = list(db.companies.find({"_id": {"$in": cached["company_ids"]}}))
         if found:
             return found
 
-    places = serp_places(query, lat, lon, state)
-    if len(places) < 3:  # widen: search the whole state
+    places = serp_places(query, lat, lon, state, with_ll=True, scope=scope)
+
+    # Fallback widening logic per scope
+    if scope == "local" and len(places) < 3:
+        # Widen to statewide if local turns up too few results
         more = serp_places(
-            f"{query} {u.get('farm_state_name', state)}", lat, lon, state, with_ll=False
+            f"{query} {u.get('farm_state_name', state)}", lat, lon, state,
+            with_ll=False, scope="statewide"
         )
         seen = {p["place_id"] for p in places}
         places += [p for p in more if p["place_id"] not in seen]
+    elif scope == "statewide" and len(places) < 3:
+        # Widen to nationwide if statewide turns up too few results
+        more = serp_places(query, lat, lon, state, with_ll=False, scope="nationwide")
+        seen = {p["place_id"] for p in places}
+        places += [p for p in more if p["place_id"] not in seen]
+
     if not places:
         return []
 

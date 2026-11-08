@@ -10,6 +10,46 @@ from fastapi import HTTPException
 from .config import SERPAPI_KEY, logger
 from .utils import number
 
+# Countries whose suppliers are silently excluded from results regardless of
+# search scope.  The customer never sees this list — they just receive results
+# from trusted origins only.  Criteria: US government export-control / sanctions
+# designations (OFAC, BIS Entity List) and supply-chain security advisories.
+BLOCKED_COUNTRIES = {
+    # Active OFAC comprehensive sanctions
+    "Russia", "RU",
+    "China", "CN",          # BIS Entity List / ITAR concerns at scale
+    "Iran", "IR",
+    "North Korea", "KP",
+    "Syria", "SY",
+    "Cuba", "CU",
+    "Venezuela", "VE",
+    "Belarus", "BY",
+    # Additional high-risk supply-chain origins per US/EU advisories
+    "Myanmar", "MM",
+    "Nicaragua", "NI",
+    "Sudan", "SD",
+    "South Sudan", "SS",
+    "Somalia", "SO",
+    "Libya", "LY",
+    "Yemen", "YE",
+    "Mali", "ML",
+    "Eritrea", "ER",
+    "Zimbabwe", "ZW",
+    "Haiti", "HT",
+}
+
+
+def _is_blocked_country(address: str) -> bool:
+    """Return True if the address string contains a blocked country name or code."""
+    if not address:
+        return False
+    upper = address.upper()
+    for name in BLOCKED_COUNTRIES:
+        # Match whole words only to avoid e.g. "IR" inside "Irving, TX"
+        if re.search(r"\b" + re.escape(name.upper()) + r"\b", upper):
+            return True
+    return False
+
 STATE_ZIP = re.compile(r"\b([A-Z]{2})\s+\d{5}(?:-\d{4})?\b")
 US_STATE_CODES = {
     "AL",
@@ -91,16 +131,35 @@ def address_state(address):
     return next((part for part in parts if part in US_STATE_CODES), "")
 
 
-def serp_places(query, lat, lon, state, with_ll=True):
+def serp_places(query, lat, lon, state, with_ll=True, scope="local"):
+    """Fetch Google Maps places via SerpAPI.
+
+    scope values:
+      local         – pin set to farm location, state filter enforced (default)
+      statewide     – no pin, state filter enforced
+      nationwide    – no pin, no state filter (US only via gl=us)
+      international – no pin, no state filter, global search with blocked-country filter
+    """
     params = {
         "engine": "google_maps",
         "q": query,
         "type": "search",
         "hl": "en",
-        "gl": "us",
     }
-    if with_ll:
+
+    if scope == "international":
+        # Global search — no country restriction in params; we filter post-fetch
+        params["gl"] = "us"  # keep results in English/USD context
+    else:
+        params["gl"] = "us"
+
+    # Use farm coordinates as the map center for local searches
+    if with_ll and scope == "local":
         params["ll"] = f"@{lat},{lon},10z"
+    elif scope == "statewide" and with_ll:
+        # Zoom out further so the whole state is visible
+        params["ll"] = f"@{lat},{lon},7z"
+
     data = serp(params)
     raw = data.get("local_results") or (
         [data["place_results"]] if data.get("place_results") else []
@@ -119,15 +178,23 @@ def serp_places(query, lat, lon, state, with_ll=True):
         if p.get("permanently_closed") or p.get("temporarily_closed"):
             continue
         addr = p.get("address", "")
-        if address_state(addr) != state:  # only businesses in the farmer's state
+
+        # Always silently filter blocked countries regardless of scope
+        if _is_blocked_country(addr):
+            logger.debug("Filtered supplier from blocked country: %s (%s)", p["title"], addr)
             continue
+
+        # State-level filter for local and statewide scopes
+        if scope in ("local", "statewide") and address_state(addr) != state:
+            continue
+
         out.append(
             {
                 "place_id": place_id,
                 "data_id": p.get("data_id", ""),
                 "name": p["title"],
                 "address": addr,
-                "state": state,
+                "state": address_state(addr) or state,
                 "latitude": gps["latitude"],
                 "longitude": gps["longitude"],
                 "phone": p.get("phone", ""),
@@ -137,6 +204,7 @@ def serp_places(query, lat, lon, state, with_ll=True):
                 "rating": number(p.get("rating")),
                 "review_count": int(number(p.get("reviews"))),
                 "maps_url": f"https://www.google.com/maps/place/?q=place_id:{place_id}",
+                "search_scope": scope,
             }
         )
     return out

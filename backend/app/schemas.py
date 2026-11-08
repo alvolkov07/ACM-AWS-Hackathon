@@ -20,8 +20,31 @@ class Login(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class SearchScope(str):
+    """How wide to cast the supplier search.
+
+    local       – within ~100 miles of the farm
+    statewide   – anywhere in the same US state
+    nationwide  – anywhere in the United States
+    international – US + trusted allied countries (high-risk origins filtered automatically)
+    """
+    pass
+
+
+VALID_SCOPES = {"local", "statewide", "nationwide", "international"}
+
+
 class Prompt(BaseModel):
     prompt: str = Field(min_length=3, max_length=2000)
+    search_scope: str = Field(
+        default="local",
+        description="local | statewide | nationwide | international",
+    )
+
+    @property
+    def scope(self) -> str:
+        s = self.search_scope.strip().lower()
+        return s if s in VALID_SCOPES else "local"
 
 
 class DraftReq(BaseModel):

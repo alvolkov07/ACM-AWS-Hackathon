@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/workflows")
 def start_workflow(b: Prompt, u=Depends(user)):
     if not u.get("farm_state"):
         raise HTTPException(409, "Add your farm location before finding suppliers")
+    scope = b.scope  # local | statewide | nationwide | international
     info = ask_json(
         "A farmer describes what they need for their farm. Turn it into a short Google Maps search phrase for the "
         "kind of local business that would provide it (e.g. 'irrigation contractor', 'farm equipment repair', "
@@ -24,9 +25,10 @@ def start_workflow(b: Prompt, u=Depends(user)):
         b.prompt, {"query": b.prompt[:60], "service": b.prompt[:30], "title": b.prompt[:40]})
     query = str(info.get("query") or b.prompt[:60]).strip()[:80]
     service = str(info.get("service") or query).strip()[:60]
-    companies = search_companies(query, u)
+    companies = search_companies(query, u, scope=scope)
     w = {"user_id": str(u["_id"]), "prompt": b.prompt, "title": str(info.get("title") or b.prompt[:40])[:80],
-         "service": service, "search_query": query, "company_ids": [str(c["_id"]) for c in companies],
+         "service": service, "search_query": query, "search_scope": scope,
+         "company_ids": [str(c["_id"]) for c in companies],
          "chat": [], "created": now()}
     w["_id"] = db.workflows.insert_one(w).inserted_id
     return clean({"workflow": w, "companies": companies, "emails": []})
