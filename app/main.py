@@ -24,6 +24,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
+from pymongo.errors import OperationFailure
  
 logger = logging.getLogger("agri_supply")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -670,7 +671,16 @@ def startup():
     db.users.create_index("username", unique=True)
     db.users.create_index("token_hash")
     db.emails.create_index([("workflow_id", 1), ("company_id", 1)])
-    db.companies.create_index("place_id", unique=True)
+    try:
+        db.companies.drop_index("place_id_1")
+    except OperationFailure as exc:
+        if exc.code != 27:
+            raise
+    db.companies.create_index(
+        "place_id",
+        unique=True,
+        partialFilterExpression={"place_id": {"$type": "string"}},
+    )
     db.companies.create_index([("state", 1), ("trust_score", -1)])
     db.searches.create_index("key", unique=True)
     if not SERPAPI_KEY:
