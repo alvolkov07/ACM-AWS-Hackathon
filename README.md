@@ -1,126 +1,94 @@
-# Agri-Supply
+<p align="center">
+    <picture>
+        <img src="docs/images/white/eagle_banner.png" width="400px" alt="Eagle Banner">
+    </picture>
+</p>
 
-Flow (from the whiteboard):
-1. Register / log in (farm name + location saved).
-2. The farm location is geocoded to coordinates and a state; suppliers are filtered to that same state and ranked by trust.
-3. Pick companies -> Claude drafts emails -> you edit & approve -> send (SMTP, or simulated if not configured).
-4. Workflow 2: log company replies, then chat / generate a report from the email history.
+<div align="center">
 
-## Run
-    cp .env.example .env     # set MongoDB Atlas and AWS Bedrock settings
-    docker compose up --build
-Open http://localhost (or your EC2 public IP; open port 80 in the security group).
+![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
+![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
+![AWS Bedrock](https://img.shields.io/badge/AWS-Bedrock-orange.svg)
 
-This starts two containers: `web` (the Next.js site, published on port 80) and
-`api` (FastAPI, only reachable inside Docker). The site forwards every `/api`
-request to the API, so the browser only ever talks to port 80.
+<p>Eagle is an AI-driven platform that matches farms with relevant service providers, automates tailored email outreach with human approval, and turns supplier responses into actionable reports and insights.</p>
 
-The app remains usable without an AI key: service matching and email drafting use
-safe rule-based fallbacks. Configure Bedrock or Anthropic to enable AI-generated
-matching, drafts, and reports.
+</div>
 
-Farm locations are geocoded through OpenStreetMap Nominatim at registration or
-profile completion. The app stores the resolved latitude, longitude, state, and
-display name in MongoDB. Supplier recommendations only include companies in the
-farm's resolved state.
+## Features
+Eagle offers a variety of features:
+- Farm accounts that save your farm name and location.
+- Plain-language service requests (e.g. *"we need irrigation repair"*) mapped to a service category by **Claude on AWS Bedrock.**
+- Service providers pulled from MongoDB and ranked by rating.
+- AI-drafted outreach emails that you can edit and approve before anything is sent.
+- Email sending over SMTP, or simulated sending when SMTP isn't configured.
+- Reply tracking, plus a chat and report generator built on your email history.
+- \+ more!
 
-Set `CLAUDE_TIER` to `haiku`, `sonnet`, or `opus` to choose the model family.
-Use `CLAUDE_MODEL` when your provider exposes a different model ID. Supplier
-locations are real cities and states, while the seeded supplier names and
-`.example.com` addresses are clearly demo data for the MVP. Ratings combine
-customer rating, review volume, reliability, and verification into a trust
-score; they are not claims about real businesses.
+## How It Works
+1. **Register / log in.** Your farm name and location are saved to your account.
+2. **Describe what you need.** Claude maps your request to a service, and matching companies are listed by rating.
+3. **Reach out.** Pick companies, let Claude draft the emails, then edit, approve, and send.
+4. **Follow up.** Log company replies, then chat with or generate a report from the full email history.
 
-Check the deployment with:
+## Build
+> [!CAUTION]
+> **In order to build and/or run this project, you will need Docker installed!** You will also need a `.env` file at the top level with your MongoDB Atlas and AWS Bedrock settings.
 
-    curl http://localhost/api/health
+This project runs as a single **Docker container** holding both the API and the front-end. Docker may require WSL (Windows Subsystem for Linux) installed on your machine if you are running a Windows device.
 
-## Live EC2 host
+```bash
+# Create your environment file, then fill in MONGO_URL and the AWS settings.
+cp .env.example .env
 
-The current deployment is available at:
+# The webapp is now live at "http://localhost"
+docker compose up --build
+docker compose down
+```
 
-    http://3.90.56.18
+### Running Without Docker
+```bash
+# Install all the project's requirements
+pip install -r requirements.txt
 
-This public IP can change if the EC2 instance is stopped and restarted. Allocate
-an Elastic IP in AWS if a stable address is needed.
+# Run the app with all the fields passed directly.
+MONGO_URL="mongodb+srv://..." AWS_REGION=us-east-1 USE_BEDROCK=1 \
+  CLAUDE_MODEL=anthropic.claude-3-5-haiku-20241022-v1:0 \
+  uvicorn app.main:app --reload
+```
 
-## Supplier search
+## Architecture
+This project is made of 3 main pieces which each handle their own respective tasks.
 
-SerpAPI is the planned provider for finding suppliers online. Configure its key
-only in the uncommitted `.env` file:
+---
 
-    SERPAPI_KEY=your-serpapi-key
+### **Frontend** (HTML, CSS & JavaScript)
+This piece is responsible for the interface that users see when launching the webapp. The whole front-end lives in `app/static/index.html` and is served by the backend.
+- Provides account registration and login for farms.
+- Walks users through requesting a service, choosing companies, and reviewing email drafts.
+- Makes RESTful API calls to the backend to send and retrieve data.
 
-Search results must be filtered to the farm's resolved state. Supplier records
-should retain their source URL and retrieval date, include only publicly
-verifiable contact details, and never invent a business name, location, email
-address, rating, or review.
+---
 
-## Run without Docker
-From the repository root:
+### **Backend** (Python w/ FastAPI)
+This piece is responsible for making everything work together. It lives in `app/main.py` and mainly provides these key features:
+- Connects to MongoDB Atlas for persistence.
+  - Stores farm accounts, workflows, companies, emails, and replies.
+  - Seeds a starter set of service companies.
+- Exposes API endpoints for the frontend to access. (e.g. `/api/workflows`, `/api/emails/{id}/send`, `/api/companies`)
+- Sends approved emails over SMTP, or simulates sending when SMTP isn't configured.
 
-    pip install -r backend/requirements.txt
-    MONGO_URL="mongodb+srv://..." AWS_REGION=us-east-1 USE_BEDROCK=1 \
-      CLAUDE_MODEL=anthropic.claude-3-5-haiku-20241022-v1:0 \
-      uvicorn app.main:app --app-dir backend --reload
+---
 
-Then, in a second terminal, start the front-end (needs Node 22 and pnpm):
+### **AI** (Claude on AWS Bedrock)
+This piece is responsible for all of the AI-related tasks, called from the backend through the Anthropic SDK.
+- Maps plain-language requests to a service category.
+- Drafts tailored outreach emails for each selected company.
+- Answers questions about and generates reports from a workflow's email history.
 
-    cd frontend
-    pnpm install
-    pnpm dev
+---
 
-Open http://localhost:3000. The dev server forwards `/api` to
-`http://localhost:8000`; set `API_URL` to use a different backend address.
+## License
+eagle is under the MIT license, a short and permissive license that allows reuse with attribution. See [LICENSE](LICENSE) for details.
 
-## AWS EC2 deployment
-1. Create a MongoDB Atlas database and allow the EC2 instance's outbound access.
-2. Enable the selected Claude model in Amazon Bedrock in `us-east-1`.
-3. Launch an Ubuntu EC2 instance with an IAM role allowing Bedrock model invocation.
-4. Open inbound TCP port 80 in the instance security group.
-5. Install Docker on the instance, clone this repository, and create `.env` from `.env.example`.
-6. Set the Atlas connection string in `.env`, then run `docker compose up --build -d`.
-7. Open the instance's public IPv4 address in a browser.
-
-## Files
-The Python API and the Next.js front-end live in separate top-level folders.
-
-    backend/                Python API (FastAPI)
-      Dockerfile            API image build
-      requirements.txt      Python dependencies
-      app/
-        main.py             FastAPI app: wires routers and startup (API only)
-        config.py           environment settings, logging, Claude model selection
-        database.py         MongoDB connection and indexes
-        ai.py               Claude client and prompt helpers
-        security.py         password/token hashing, login dependency
-        schemas.py          request bodies and validation
-        geo.py              geocoding and distance
-        serpapi.py          SerpAPI search and place parsing
-        trust.py            supplier trust scoring
-        enrichment.py       reviews, contact emails, review summaries
-        suppliers.py        supplier search and caching
-        utils.py            shared helpers
-        routes/             API endpoints (auth, workflows, emails, health)
-    frontend/               Next.js + Tailwind front-end (TypeScript)
-      Dockerfile            standalone Next.js server image
-      next.config.ts        forwards /api to the backend (API_URL)
-      public/               logos and the hero background photo
-      src/app/              pages: landing, login, signup, setup-location,
-                            dashboard, workflows/[id]
-      src/components/       shared UI, app shell, workflow steps
-      src/lib/              API client, types, formatting helpers
-      old/index.html        previous single-file front-end, kept for reference
-    docker-compose.yml      web (Next.js, port 80) + api (FastAPI, internal);
-                            MongoDB is external (Atlas)
-
-## Troubleshooting
-- `Authentication failed`: reset the MongoDB Atlas database-user password and
-  copy the complete URI from Atlas **Connect → Drivers** into `.env`.
-- `Connection refused` or "Can't reach the Eagle server": run
-  `docker compose ps -a`, then `docker compose logs --tail=100 api` and
-  `docker compose logs --tail=100 web`.
-- Do not commit `.env`; it contains credentials and is ignored by Git.
-
-## Not in MVP (next steps)
-Email activation code, reading real replies from inbox, company import UI (POST /api/companies exists), password reset.
+## Credits
+eagle is made by The Eagle Team for the ACM AWS Hackathon.
