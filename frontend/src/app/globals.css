@@ -1,0 +1,360 @@
+@import "tailwindcss";
+
+/* Light, earthy palette: cream page, wheat-field hero photo, white brand marks. */
+:root {
+  --surface: #f6f4ec; /* cream page */
+  --ink: #1f2a1c; /* deep soil green, for text on cream */
+  --muted: #5c6b55;
+  --field: #3a7340; /* green accent, also shown while the hero photo loads */
+  --field-deep: #2c5e30;
+  --leaf: #6fae5a;
+  --mint: #e9f1e0; /* pale green fills: pills, chat bubbles */
+  --wheat: #e9a524; /* golden accent from the hero photo */
+  --wheat-soft: #f6e7c4;
+  --line: #e6e2d3; /* card and input borders on cream */
+  --danger: #b4452e;
+
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-field: var(--field);
+  --color-field-deep: var(--field-deep);
+  --color-leaf: var(--leaf);
+  --color-mint: var(--mint);
+  --color-wheat: var(--wheat);
+  --color-wheat-soft: var(--wheat-soft);
+  --color-line: var(--line);
+  --color-danger: var(--danger);
+
+  --font-sans: var(--font-outfit), "Helvetica Neue", sans-serif;
+  --font-display: var(--font-fogie), Georgia, serif;
+
+  --animate-fade-up: fade-up 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: rgba(111, 174, 90, 0.35);
+  color: var(--ink);
+}
+
+/* ---------- Hero text on the photo ---------- */
+
+/* Soft shadow so white text stays readable over bright sky and wheat. */
+.on-photo {
+  text-shadow: 0 1px 14px rgba(20, 30, 12, 0.35);
+}
+
+/* ---------- Wheat sprig icon ---------- */
+
+/* Draws the white brand sprig in the current text color, so it also works on
+   white buttons. */
+.sprig {
+  display: inline-block;
+  flex: none;
+  background-color: currentColor;
+  -webkit-mask: url("/brand/eagle_logo_white.png") center / contain no-repeat;
+  mask: url("/brand/eagle_logo_white.png") center / contain no-repeat;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  padding: 0.85rem 1.6rem;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+@media (min-width: 768px) {
+  .btn {
+    padding: 1rem 1.9rem;
+    font-size: 20px;
+  }
+}
+
+.btn:hover {
+  transform: translateY(-3px);
+}
+
+.btn:active {
+  transform: translateY(1px);
+  transition-duration: 0.08s;
+}
+
+.btn:focus-visible {
+  outline: 3px solid #f3e4c4;
+  outline-offset: 3px;
+}
+
+/* Solid pill with a chunky "pressable" shadow underneath. Colors come from
+   the variant class below. */
+.btn-solid {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  box-shadow: 0 4px 0 var(--btn-press);
+}
+
+.btn-solid:hover {
+  background: var(--btn-bg-hover);
+  box-shadow: 0 7px 0 var(--btn-press);
+}
+
+.btn-solid:active {
+  box-shadow: 0 1px 0 var(--btn-press);
+}
+
+/* Pure white with black text (hero, and other buttons on the photo). */
+.btn-white {
+  --btn-bg: #ffffff;
+  --btn-bg-hover: #ffffff;
+  --btn-fg: #000000;
+  --btn-press: rgba(0, 0, 0, 0.35);
+}
+
+/* Field green: the main action on cream pages. */
+.btn-green {
+  --btn-bg: var(--field);
+  --btn-bg-hover: #43804a;
+  --btn-fg: #ffffff;
+  --btn-press: #1d4322;
+}
+
+/* Golden wheat: reports and other "harvest" actions. */
+.btn-wheat {
+  --btn-bg: var(--wheat);
+  --btn-bg-hover: #f2b43a;
+  --btn-fg: #3d2604;
+  --btn-press: #9a5d00;
+}
+
+/* White with a border, for secondary actions on cream. */
+.btn-outline {
+  --btn-bg: #ffffff;
+  --btn-bg-hover: #ffffff;
+  --btn-fg: var(--ink);
+  --btn-press: var(--line);
+  border-color: var(--line);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.btn-ghost {
+  border-color: rgba(255, 255, 255, 0.75);
+  color: #ffffff;
+}
+
+.btn-ghost:hover {
+  border-color: #ffffff;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Compact variant for the header. Comes after the .btn media query so it wins. */
+.btn-sm {
+  padding: 0.6rem 1.15rem;
+  font-size: 16px;
+  box-shadow: 0 3px 0 var(--btn-press);
+}
+
+.btn-sm:hover {
+  box-shadow: 0 5px 0 var(--btn-press);
+}
+
+.btn__sprig {
+  width: 1.1em;
+  height: 1.1em;
+  transform-origin: 20% 90%;
+}
+
+.btn:hover .btn__sprig {
+  animation: sprig-wiggle 0.7s ease-in-out;
+}
+
+@keyframes sprig-wiggle {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  30% {
+    transform: rotate(-14deg);
+  }
+  60% {
+    transform: rotate(9deg);
+  }
+}
+
+.nav-link {
+  border-radius: 999px;
+  padding: 0.55rem 0.9rem;
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.9);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.nav-link:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+/* ---------- App surfaces ---------- */
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(31, 42, 28, 0.04),
+    0 10px 30px rgba(31, 42, 28, 0.05);
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.field {
+  width: 100%;
+  border: 1.5px solid var(--line);
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 0.8rem 1rem;
+  font-size: 15px;
+  color: var(--ink);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.field::placeholder {
+  color: #9aa394;
+}
+
+.field:focus {
+  outline: none;
+  border-color: var(--leaf);
+  box-shadow: 0 0 0 4px rgba(111, 174, 90, 0.18);
+}
+
+.field:disabled,
+.field[readonly] {
+  background: #faf9f4;
+  color: var(--muted);
+}
+
+textarea.field {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border-radius: 999px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toast-in {
+  animation: toast-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .toast-in {
+    animation: none;
+  }
+  .animate-fade-up {
+    animation-duration: 1ms;
+  }
+  .btn {
+    transition: none;
+  }
+  .btn:hover,
+  .btn:hover .btn__sprig {
+    transform: none;
+    animation: none;
+  }
+}

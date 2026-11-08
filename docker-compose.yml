@@ -1,5 +1,48 @@
 services:
+  # Next.js front-end: the public site on port 80. It forwards /api requests
+  # to the api service over Docker's internal network.
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the build; must match the api service name and port below.
+        API_URL: http://api:8000
+    ports: ["80:3000"]
+    depends_on:
+      - api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Python API (FastAPI). Not published to the host; only web talks to it.
   api:
-    build: .
-    ports: ["80:8000"]
+    build: ./backend
+    expose: ["8000"]
     env_file: .env
+    # AI settings read by app/config.py and app/ai.py. Values come from .env;
+    # the defaults here apply when a value is missing there.
+    environment:
+      # Provider: USE_BEDROCK=1 uses AWS Bedrock (EC2 IAM role), otherwise the
+      # Anthropic API is used when ANTHROPIC_API_KEY is set. With neither,
+      # the app runs on rule-based fallbacks.
+      USE_BEDROCK: ${USE_BEDROCK:-1}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Model choice: CLAUDE_MODEL overrides everything (required for Bedrock).
+      # Otherwise tiers are haiku, sonnet, or opus; CLAUDE_TIER sets both tasks,
+      # and the FAST/SMART variables override it per task.
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-}
+      CLAUDE_TIER: ${CLAUDE_TIER:-}
+      CLAUDE_FAST_TIER: ${CLAUDE_FAST_TIER:-}    # search phrasing, review summaries (default haiku)
+      CLAUDE_SMART_TIER: ${CLAUDE_SMART_TIER:-}  # email drafts, chat (default sonnet)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

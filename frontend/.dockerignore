@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+old
+reference
+*.tsbuildinfo
+next-env.d.ts
+.env*
+Dockerfile
+.dockerignore
