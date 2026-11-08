@@ -268,6 +268,21 @@ function toast(msg, isErr){
   clearTimeout(toast._t); toast._t = setTimeout(() => t.className = "toast", 2600);
 }
 
+function readableError(detail, fallback){
+  if(typeof detail === "string") return detail;
+  if(Array.isArray(detail)){
+    return detail.map(item => {
+      if(typeof item === "string") return item;
+      const location = Array.isArray(item.loc) ? item.loc.join(" → ") : "";
+      return location && item.msg ? `${location}: ${item.msg}` : (item.msg || JSON.stringify(item));
+    }).join("; ");
+  }
+  if(detail && typeof detail === "object"){
+    return detail.message || detail.msg || JSON.stringify(detail);
+  }
+  return fallback;
+}
+
 async function api(path, method = "GET", body){
   const r = await fetch("/api" + path, {
     method, headers:{"Content-Type":"application/json", Authorization:"Bearer " + token},
@@ -278,7 +293,10 @@ async function api(path, method = "GET", body){
     authView();
     throw new Error("Your session expired. Please log in again.");
   }
-  if(!r.ok){ const e = await r.json().catch(()=>({})); throw new Error(e.detail || r.statusText); }
+  if(!r.ok){
+    const e = await r.json().catch(()=>({}));
+    throw new Error(readableError(e.detail, r.statusText));
+  }
   return r.json();
 }
 const run = fn => async (...a) => { try { await fn(...a); } catch(e){ toast(e.message, true); } };
