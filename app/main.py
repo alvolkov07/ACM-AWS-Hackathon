@@ -194,6 +194,11 @@ class Reply(BaseModel):
  
 class FarmLocation(BaseModel):
     farm_location: str = Field(min_length=3, max_length=200)
+
+
+EMAIL_FORMAT = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+
 class Company(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     email: str = Field(min_length=3, max_length=254)
