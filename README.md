@@ -1,5 +1,4 @@
-# Agri-Supply MVP
-im the biggest bird
+# Agri-Supply
 
 Flow (from the whiteboard):
 1. Register / log in (farm name + location saved).
@@ -11,6 +10,14 @@ Flow (from the whiteboard):
     cp .env.example .env     # set MongoDB Atlas and AWS Bedrock settings
     docker compose up --build
 Open http://localhost (or your EC2 public IP; open port 80 in the security group).
+
+The app remains usable without an AI key: service matching and email drafting use
+safe rule-based fallbacks. Configure Bedrock or Anthropic to enable AI-generated
+matching, drafts, and reports.
+
+Check the deployment with:
+
+    curl http://localhost/api/health
 
 ## Run without Docker
     pip install -r requirements.txt
@@ -31,6 +38,13 @@ Open http://localhost (or your EC2 public IP; open port 80 in the security group
 - app/main.py          API + Claude calls + seed companies
 - app/static/index.html  whole front-end
 - docker-compose.yml   API + MongoDB
+
+## Troubleshooting
+- `Authentication failed`: reset the MongoDB Atlas database-user password and
+  copy the complete URI from Atlas **Connect → Drivers** into `.env`.
+- `Connection refused`: run `docker compose ps -a` and
+  `docker compose logs --tail=100 api`.
+- Do not commit `.env`; it contains credentials and is ignored by Git.
 
 ## Not in MVP (next steps)
 Email activation code, reading real replies from inbox, company import UI (POST /api/companies exists), password reset.
