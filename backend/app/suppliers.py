@@ -19,6 +19,10 @@ BUDGET_FIT_GOOD = "Good fit"
 BUDGET_FIT_OVER = "May exceed budget"
 BUDGET_FIT_UNKNOWN = "Price unknown"
 
+# Rough shipping cost estimate per mile (USD) — used to flag far suppliers.
+# Based on typical LTL freight rates for agricultural inputs (~$0.05–$0.10/mi).
+SHIPPING_COST_PER_MILE = 0.07
+
 
 def save_company(c):
     c["trust_score"] = trust_score(c)
@@ -29,7 +33,7 @@ def save_company(c):
 
 
 def _budget_fit_label(score: int) -> str:
-    """Convert a 1-3 AI budget score into a friendly label."""
+    """Convert a 1-3 AI price score to a friendly label."""
     if score == 1:
         return BUDGET_FIT_BEST
     if score == 2:
@@ -39,57 +43,125 @@ def _budget_fit_label(score: int) -> str:
     return BUDGET_FIT_UNKNOWN
 
 
+def _shipping_tier(distance_miles: float) -> tuple[str, float]:
+    """
+    Return (label, estimated_cost) based on distance.
+    Cost is a rough freight estimate for low-income farmers to plan their budget.
+    """
+    if distance_miles <= 0:
+        return ("Pickup available", 0.0)
+    cost = round(distance_miles * SHIPPING_COST_PER_MILE, 2)
+    if distance_miles <= 30:
+        return (f"~${cost:.0f} est. shipping", cost)
+    if distance_miles <= 100:
+        return (f"~${cost:.0f} est. shipping", cost)
+    if distance_miles <= 500:
+        return (f"~${cost:.0f} est. shipping (long haul)", cost)
+    return (f"~${cost:.0f} est. shipping (very far)", cost)
+
+
 def score_companies_for_budget(companies, budget_label: str, service_query: str):
     """
-    Ask the AI to rate each company's price fit against the farmer's budget.
-    Returns companies with a `budget_fit` label and `budget_score` (1=best, 3=over).
-    Falls back gracefully if AI is unavailable.
+    Score each company on three dimensions and produce a combined `value_rank`:
+
+      1. price_score   — AI-inferred price tier from reviews (1=cheapest, 3=premium)
+      2. satisfaction  — derived from trust_score / rating (higher = better)
+      3. shipping_cost — estimated from distance_miles (lower = better)
+
+    All three feed into a single `value_rank` (lower is better, 1 = top pick).
+    Each company also gets:
+      - budget_fit      : human label ("Best value", "Good fit", etc.)
+      - shipping_label  : estimated shipping cost string
+      - value_score     : 0–100 composite shown to the farmer (higher = better)
     """
     if not companies:
         return companies
 
+    # --- Step 1: Ask AI to rate price tier from review signals ---
     profiles = []
     for i, c in enumerate(companies):
+        dist = c.get("distance_miles")
+        dist_str = f"{dist:.0f} mi away" if dist is not None else "distance unknown"
         profiles.append(
-            f"{i}: {c['name']} | rating={c.get('rating', '?')}/5 "
-            f"({c.get('review_count', 0)} reviews) | "
+            f"{i}: {c['name']} | {dist_str} | "
+            f"rating={c.get('rating', '?')}/5 ({c.get('review_count', 0)} reviews) | "
             f"reviews: {c.get('review_summary', 'none')}"
         )
 
     prompt = (
         f"A low-income farmer needs: {service_query}\n"
         f"Their budget is {budget_label}.\n\n"
-        "For each supplier below, rate how well they fit this budget:\n"
-        "1 = Best value (likely affordable, good reviews for the price)\n"
-        "2 = Good fit (probably within range)\n"
-        "3 = May exceed budget (premium pricing signals in reviews)\n\n"
+        "For each supplier, infer their price tier from review text and rating patterns:\n"
+        "1 = Budget-friendly / affordable (good value for the price)\n"
+        "2 = Mid-range (probably within budget)\n"
+        "3 = Premium / expensive (reviews mention high prices or luxury service)\n\n"
         "Suppliers:\n" + "\n".join(profiles) + "\n\n"
-        "Reply ONLY with a JSON object mapping each index to its score, e.g. "
+        "Reply ONLY with a JSON object mapping each index to its price tier score, e.g. "
         '{"0": 1, "1": 2, "2": 3}'
     )
 
     try:
         response = ask(
             "You are a procurement assistant helping low-income farmers find affordable suppliers. "
-            "Use review text and rating patterns to infer price tier. Never invent facts.",
+            "Use review text and rating patterns to infer price tier. "
+            "If reviews mention 'affordable', 'fair price', 'cheap', or 'great value' score 1. "
+            "If reviews mention 'expensive', 'pricey', 'premium', or 'high-end' score 3. "
+            "Otherwise score 2. Never invent facts.",
             prompt,
-            max_tokens=300,
+            max_tokens=400,
             task="fast",
         )
         match = re.search(r"\{.*\}", response, re.S)
-        scores = json.loads(match.group()) if match else {}
+        price_scores = json.loads(match.group()) if match else {}
     except Exception as exc:
-        logger.warning("Budget scoring failed, skipping: %s", exc)
-        scores = {}
+        logger.warning("Budget scoring failed, using defaults: %s", exc)
+        price_scores = {}
 
+    # --- Step 2: Compute composite value score for each company ---
     for i, c in enumerate(companies):
-        raw = scores.get(str(i))
+        # Price tier (1–3, lower = cheaper)
+        raw = price_scores.get(str(i))
         try:
-            score = int(raw) if raw is not None else 0
+            price_score = int(raw) if raw is not None else 2
         except (TypeError, ValueError):
-            score = 0
-        c["budget_score"] = score if score in (1, 2, 3) else 0
-        c["budget_fit"] = _budget_fit_label(c["budget_score"])
+            price_score = 2
+        price_score = price_score if price_score in (1, 2, 3) else 2
+
+        # Customer satisfaction (0–5 from trust_score)
+        satisfaction = float(c.get("trust_score") or c.get("rating") or 3.0)
+
+        # Shipping cost estimate
+        distance = float(c.get("distance_miles") or 0)
+        shipping_label, shipping_cost = _shipping_tier(distance)
+
+        # Normalise shipping cost into a 0–1 penalty (0 = free, 1 = very expensive)
+        # Cap at $500 shipping so outliers don't dominate
+        shipping_penalty = min(shipping_cost / 500.0, 1.0)
+
+        # Composite value_score (0–100, higher = better pick for this farmer):
+        #   40% price affordability  (price_score 1→100, 2→60, 3→20)
+        #   40% customer satisfaction (scaled 0–5 → 0–100)
+        #   20% shipping proximity   (lower penalty = higher score)
+        price_component    = {1: 100, 2: 60, 3: 20}[price_score]
+        sat_component      = (satisfaction / 5.0) * 100
+        shipping_component = (1.0 - shipping_penalty) * 100
+
+        value_score = round(
+            price_component * 0.40
+            + sat_component  * 0.40
+            + shipping_component * 0.20
+        )
+
+        c["budget_score"]   = price_score
+        c["budget_fit"]     = _budget_fit_label(price_score)
+        c["shipping_label"] = shipping_label
+        c["shipping_cost_est"] = round(shipping_cost, 2)
+        c["value_score"]    = value_score  # 0–100 shown to farmer
+
+    # --- Step 3: Rank by value_score descending ---
+    companies.sort(key=lambda c: -c.get("value_score", 0))
+    for rank, c in enumerate(companies, start=1):
+        c["value_rank"] = rank  # 1 = top pick
 
     return companies
 
@@ -97,8 +169,8 @@ def score_companies_for_budget(companies, budget_label: str, service_query: str)
 def search_companies(query, u, scope="local", budget_label=""):
     """Find real businesses based on scope, cache them, enrich the best ones.
 
-    If budget_label is provided, companies are additionally scored and sorted
-    by budget fit (best value first, within the same trust tier).
+    If budget_label is provided, companies are scored on price, satisfaction,
+    and shipping cost, then ranked by a composite value_score.
     """
     state = u["farm_state"]
     lat, lon = u["farm_latitude"], u["farm_longitude"]
@@ -109,7 +181,6 @@ def search_companies(query, u, scope="local", budget_label=""):
         if found:
             if budget_label:
                 found = score_companies_for_budget(found, budget_label, query)
-                found.sort(key=lambda c: (c.get("budget_score") or 9, -c["trust_score"]))
             return found
 
     places = serp_places(query, lat, lon, state, with_ll=True, scope=scope)
@@ -155,9 +226,8 @@ def search_companies(query, u, scope="local", budget_label=""):
     saved = [save_company(p) for p in places]
 
     if budget_label:
-        # Score and sort: best value + highest trust first
+        # Score on price + satisfaction + shipping, sort by value_score
         saved = score_companies_for_budget(saved, budget_label, query)
-        saved.sort(key=lambda c: (c.get("budget_score") or 9, -c["trust_score"]))
     else:
         saved.sort(key=lambda c: (-c["trust_score"], c.get("distance_miles", 0)))
 

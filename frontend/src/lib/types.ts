@@ -13,6 +13,8 @@ export type User = {
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
+export type SearchScope = "local" | "statewide" | "nationwide" | "international";
+
 export type Workflow = {
   _id: string;
   title: string;
@@ -20,6 +22,10 @@ export type Workflow = {
   service?: string;
   created?: string;
   chat?: ChatMessage[];
+  search_scope?: SearchScope;
+  budget_min?: number | null;
+  budget_max?: number | null;
+  budget_label?: string;
 };
 
 export type Company = {
@@ -39,6 +45,12 @@ export type Company = {
   website?: string;
   maps_url?: string;
   email?: string;
+  budget_fit?: string;
+  budget_score?: number;
+  shipping_label?: string;
+  shipping_cost_est?: number;
+  value_score?: number;
+  value_rank?: number;
 };
 
 export type Email = {

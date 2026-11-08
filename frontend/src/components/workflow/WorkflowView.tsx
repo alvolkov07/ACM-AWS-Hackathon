@@ -76,8 +76,24 @@ export default function WorkflowView() {
       </div>
 
       <blockquote className="mt-5 rounded-[20px] border-l-4 border-wheat bg-white px-5 py-4 text-[15.5px] leading-relaxed text-ink/85">
-        “{w.prompt}”
+        &ldquo;{w.prompt}&rdquo;
       </blockquote>
+
+      {/* Budget + scope summary */}
+      {(w.budget_label || (w.search_scope && w.search_scope !== "local")) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {w.budget_label && (
+            <span className="pill bg-wheat-soft text-[13px] text-[#6b4e12]">
+              💰 Budget: {w.budget_label}
+            </span>
+          )}
+          {w.search_scope && w.search_scope !== "local" && (
+            <span className="pill bg-mint text-[13px] text-field-deep capitalize">
+              🔍 {w.search_scope} search
+            </span>
+          )}
+        </div>
+      )}
 
       <SupplierStep workflowId={w._id} companies={companies} emails={emails} onDrafted={load} />
 

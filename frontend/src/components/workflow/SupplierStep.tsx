@@ -18,6 +18,13 @@ type Props = {
 
 const fmt = (n?: number) => Number(n || 0).toFixed(1);
 
+const BUDGET_FIT_STYLE: Record<string, string> = {
+  "Best value":        "bg-mint text-field-deep",
+  "Good fit":          "bg-wheat-soft text-[#6b4e12]",
+  "May exceed budget": "bg-red-50 text-red-700",
+  "Price unknown":     "bg-[#f3f3f0] text-muted",
+};
+
 export default function SupplierStep({ workflowId, companies, emails, onDrafted }: Props) {
   const { handleError } = useApp();
   const toast = useToast();
@@ -117,11 +124,38 @@ export default function SupplierStep({ workflowId, companies, emails, onDrafted 
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <span className="font-display text-[18px] leading-snug">{c.name}</span>
+                          {c.value_rank === 1 && (
+                            <span className="pill bg-[#e6f4ea] text-[#1a6b2a] text-[12px]">🏆 Top pick</span>
+                          )}
                           {c.verified && <span className="pill bg-mint text-field-deep">✓ Verified</span>}
+                          {c.budget_fit && (
+                            <span className={`pill text-[12px] ${BUDGET_FIT_STYLE[c.budget_fit] ?? "bg-[#f3f3f0] text-muted"}`}>
+                              {c.budget_fit === "Best value" && "💚 "}
+                              {c.budget_fit === "May exceed budget" && "⚠️ "}
+                              {c.budget_fit}
+                            </span>
+                          )}
                           {isDrafted && <span className="pill bg-wheat-soft text-[#6b4e12]">Email drafted</span>}
                         </span>
+                        {/* Value score bar */}
+                        {c.value_score != null && (
+                          <span className="mt-2 flex items-center gap-2">
+                            <span className="text-[12px] text-muted">Value score</span>
+                            <span className="relative h-2 w-24 overflow-hidden rounded-full bg-line">
+                              <span
+                                className="absolute left-0 top-0 h-full rounded-full bg-leaf"
+                                style={{ width: `${c.value_score}%` }}
+                              />
+                            </span>
+                            <span className="text-[12px] font-medium text-ink">{c.value_score}/100</span>
+                          </span>
+                        )}
                         <span className="mt-1 block text-[13.5px] text-muted">
-                          {[c.address || c.state, c.distance_miles != null ? `${fmt(c.distance_miles)} mi away` : null]
+                          {[
+                            c.address || c.state,
+                            c.distance_miles != null ? `${fmt(c.distance_miles)} mi away` : null,
+                            c.shipping_label ?? null,
+                          ]
                             .filter(Boolean)
                             .join(" · ")}
                         </span>
