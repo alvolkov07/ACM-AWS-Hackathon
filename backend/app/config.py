@@ -22,6 +22,13 @@ TIER_ENV = {
     "smart": ("CLAUDE_SMART_TIER", "sonnet"),
 }
 
+# Folder holding the front-end (index.html). Defaults to <repo>/frontend;
+# the Docker image sets it explicitly.
+FRONTEND_DIR = os.path.abspath(
+    os.getenv("FRONTEND_DIR")
+    or os.path.join(os.path.dirname(__file__), "..", "..", "frontend")
+)
+
 SEARCH_CACHE = timedelta(hours=24)
 ENRICH_CACHE = timedelta(days=30)
 MAX_RESULTS = 8  # businesses shown per search

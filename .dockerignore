@@ -3,4 +3,7 @@
 .gitignore
 __pycache__
 *.py[cod]
+.venv
+venv
 README.md
+docker-compose.yml

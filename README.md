@@ -53,10 +53,15 @@ verifiable contact details, and never invent a business name, location, email
 address, rating, or review.
 
 ## Run without Docker
-    pip install -r requirements.txt
+From the repository root:
+
+    pip install -r backend/requirements.txt
     MONGO_URL="mongodb+srv://..." AWS_REGION=us-east-1 USE_BEDROCK=1 \
       CLAUDE_MODEL=anthropic.claude-3-5-haiku-20241022-v1:0 \
-      uvicorn app.main:app --reload
+      uvicorn app.main:app --app-dir backend --reload
+
+The API serves the front-end from `frontend/` automatically. Set
+`FRONTEND_DIR` only if the front-end lives somewhere else.
 
 ## AWS EC2 deployment
 1. Create a MongoDB Atlas database and allow the EC2 instance's outbound access.
@@ -68,21 +73,29 @@ address, rating, or review.
 7. Open the instance's public IPv4 address in a browser.
 
 ## Files
-- app/main.py          FastAPI app: wires routers, startup, serves the front-end
-- app/config.py        environment settings, logging, Claude model selection
-- app/database.py      MongoDB connection and indexes
-- app/ai.py            Claude client and prompt helpers
-- app/security.py      password/token hashing, login dependency
-- app/schemas.py       request bodies and validation
-- app/geo.py           geocoding and distance
-- app/serpapi.py       SerpAPI search and place parsing
-- app/trust.py         supplier trust scoring
-- app/enrichment.py    reviews, contact emails, review summaries
-- app/suppliers.py     supplier search and caching
-- app/utils.py         shared helpers
-- app/routes/          API endpoints (auth, workflows, emails, health)
-- app/static/index.html  whole front-end
-- docker-compose.yml   API + MongoDB
+The Python API and the HTML front-end live in separate top-level folders.
+
+    backend/                Python API (FastAPI)
+      Dockerfile            image build; context is the repo root
+      requirements.txt      Python dependencies
+      app/
+        main.py             FastAPI app: wires routers, startup, serves the front-end
+        config.py           environment settings, logging, Claude model selection
+        database.py         MongoDB connection and indexes
+        ai.py               Claude client and prompt helpers
+        security.py         password/token hashing, login dependency
+        schemas.py          request bodies and validation
+        geo.py              geocoding and distance
+        serpapi.py          SerpAPI search and place parsing
+        trust.py            supplier trust scoring
+        enrichment.py       reviews, contact emails, review summaries
+        suppliers.py        supplier search and caching
+        utils.py            shared helpers
+        routes/             API endpoints (auth, workflows, emails, health)
+    frontend/
+      index.html            whole front-end (served at / and /static)
+    docker-compose.yml      builds backend/Dockerfile into one API container;
+                            MongoDB is external (Atlas)
 
 ## Troubleshooting
 - `Authentication failed`: reset the MongoDB Atlas database-user password and
