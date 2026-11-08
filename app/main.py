@@ -134,6 +134,28 @@ class Company(BaseModel):
     reliability_score: float = Field(default=3.0, ge=0, le=5)
     verified: bool = False
 
+ADDRESS_EXAMPLE = "e.g. 1234 Main St, Fresno, CA 93720"
+
+def require_full_address(location):
+    """Require a full street address: street number, city, state and ZIP code."""
+    value = " ".join(location.split())
+    parts = [p.strip() for p in value.split(",") if p.strip()]
+    if len(parts) < 3:
+        raise HTTPException(422, f"Enter a full address with street number, city, state and ZIP code ({ADDRESS_EXAMPLE})")
+    street = parts[0]
+    if not re.match(r"^\d+[A-Za-z]?\s+\S", street):
+        raise HTTPException(422, f"Address must start with a street number and street name ({ADDRESS_EXAMPLE})")
+    if not re.fullmatch(r"[A-Za-z][A-Za-z .'\-]*", parts[1]):
+        raise HTTPException(422, f"Address needs a city between the street and the state ({ADDRESS_EXAMPLE})")
+    tail = " ".join(parts[2:])
+    zip_match = re.search(r"\b\d{5}(?:-\d{4})?\b", tail)
+    if not zip_match:
+        raise HTTPException(422, f"Address needs a 5-digit ZIP code ({ADDRESS_EXAMPLE})")
+    state = tail[:zip_match.start()].strip(" ,")
+    if not re.fullmatch(r"[A-Za-z][A-Za-z .]*", state):
+        raise HTTPException(422, f"Address needs a state before the ZIP code ({ADDRESS_EXAMPLE})")
+    return ", ".join(parts)
+
 def geocode_location(location):
     query = urllib.parse.urlencode({"q": location, "format": "jsonv2", "addressdetails": 1, "limit": 1})
     request = urllib.request.Request(
@@ -170,7 +192,7 @@ def register(r: Register):
     r.email = r.email.strip().lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", r.email):
         raise HTTPException(422, "Enter a valid email address")
-    location = geocode_location(r.farm_location.strip())
+    location = geocode_location(require_full_address(r.farm_location))
     if db.users.find_one({"username": r.username}): raise HTTPException(400, "Username taken")
     salt, token = secrets.token_hex(8), secrets.token_hex(24)
     db.users.insert_one({

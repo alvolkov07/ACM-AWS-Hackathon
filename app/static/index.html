@@ -228,6 +228,7 @@ button{font:inherit}
 .auth-box label{font-size:12px;font-weight:600;color:var(--ink-soft);display:block;margin:12px 0 4px}
 .auth-box input{width:100%;border:1.5px solid var(--line);border-radius:11px;padding:12px 13px;font:inherit;background:#fff}
 .auth-box input:focus{outline:none;border-color:var(--leaf);box-shadow:0 0 0 4px rgba(111,174,90,.15)}
+.auth-box .hint{display:block;color:var(--ink-soft);font-size:11.5px;margin-top:5px;line-height:1.45}
 .auth-box .btn{width:100%;justify-content:center;margin-top:20px}
 .auth-tabs{display:flex;background:var(--mint);border-radius:12px;padding:4px;margin-bottom:22px}
 .auth-tabs button{flex:1;border:0;background:none;padding:9px;border-radius:9px;font-weight:600;color:var(--ink-soft);cursor:pointer;font-size:13.5px}
@@ -322,10 +323,10 @@ function authView(){
             <div><label>Password</label><input id="rp" type="password" placeholder="••••••••"></div>
           </div>
           <label>Email</label><input id="re" placeholder="you@farm.com">
-          <div class="grid2">
-            <div><label>Farm name</label><input id="rf" placeholder="Green Acres"></div>
-            <div><label>Location</label><input id="rl" placeholder="Fresno, CA"></div>
-          </div>
+          <label>Farm name</label><input id="rf" placeholder="Green Acres">
+          <label>Location</label>
+          <input id="rl" placeholder="1234 Main St, Fresno, CA 93720">
+          <small class="hint">Full address required: street number, city, state and ZIP code.</small>
           <button class="btn" onclick="register()">Create account →</button>
         </div>
       </div>
@@ -343,10 +344,25 @@ const login = run(async () => {
   token = (await api("/login","POST",{username:$("#u").value, password:$("#p").value})).token;
   localStorage.token = token; await home();
 });
+const ADDRESS_EXAMPLE = "e.g. 1234 Main St, Fresno, CA 93720";
+function fullAddress(raw){
+  const value = raw.trim().replace(/\s+/g, " ");
+  const parts = value.split(",").map(p => p.trim()).filter(Boolean);
+  if(parts.length < 3) throw new Error("Enter a full address with street number, city, state and ZIP code (" + ADDRESS_EXAMPLE + ")");
+  if(!/^\d+[A-Za-z]?\s+\S/.test(parts[0])) throw new Error("Address must start with a street number and street name (" + ADDRESS_EXAMPLE + ")");
+  if(!/^[A-Za-z][A-Za-z .'\-]*$/.test(parts[1])) throw new Error("Address needs a city between the street and the state (" + ADDRESS_EXAMPLE + ")");
+  const tail = parts.slice(2).join(" ");
+  const zip = tail.match(/\b\d{5}(-\d{4})?\b/);
+  if(!zip) throw new Error("Address needs a 5-digit ZIP code (" + ADDRESS_EXAMPLE + ")");
+  const state = tail.slice(0, zip.index).replace(/^[\s,]+|[\s,]+$/g, "");
+  if(!/^[A-Za-z][A-Za-z .]*$/.test(state)) throw new Error("Address needs a state before the ZIP code (" + ADDRESS_EXAMPLE + ")");
+  return parts.join(", ");
+}
 const register = run(async () => {
+  const farm_location = fullAddress($("#rl").value);
   token = (await api("/register","POST",{
     username:$("#ru").value, password:$("#rp").value, email:$("#re").value,
-    farm_name:$("#rf").value, farm_location:$("#rl").value})).token;
+    farm_name:$("#rf").value, farm_location})).token;
   localStorage.token = token; await home();
 });
 function logout(){ localStorage.removeItem("token"); token=""; me=null; authView(); }
