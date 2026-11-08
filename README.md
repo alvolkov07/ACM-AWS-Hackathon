@@ -10,19 +10,19 @@
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 ![AWS Bedrock](https://img.shields.io/badge/AWS-Bedrock-orange.svg)
 
-<p>eagle is an AI-driven platform that matches farms with relevant service providers, automates tailored email outreach with human approval, and turns supplier responses into actionable reports and insights.</p>
+<p>Eagle is an AI-driven platform that matches farms with relevant service providers, automates tailored email outreach with human approval, and turns supplier responses into actionable reports and insights.</p>
 
 </div>
 
 ## Features
-eagle offers a variety of features:
+Eagle offers a variety of features:
 - Farm accounts that save your farm name and location.
 - Plain-language service requests (e.g. *"we need irrigation repair"*) mapped to a service category by **Claude on AWS Bedrock.**
 - Service providers pulled from MongoDB and ranked by rating.
 - AI-drafted outreach emails that you can edit and approve before anything is sent.
 - Email sending over SMTP, or simulated sending when SMTP isn't configured.
 - Reply tracking, plus a chat and report generator built on your email history.
-- + more!
+- \+ more!
 
 ## How It Works
 1. **Register / log in.** Your farm name and location are saved to your account.
@@ -34,7 +34,7 @@ eagle offers a variety of features:
 > [!CAUTION]
 > **In order to build and/or run this project, you will need Docker installed!** You will also need a `.env` file at the top level with your MongoDB Atlas and AWS Bedrock settings.
 
-This project runs as a single **Docker container** holding the API and the front-end. Docker may require WSL (Windows Subsystem for Linux) installed on your machine if you are running a Windows device.
+This project runs as a single **Docker container** holding both the API and the front-end. Docker may require WSL (Windows Subsystem for Linux) installed on your machine if you are running a Windows device.
 
 ```bash
 # Create your environment file, then fill in MONGO_URL and the AWS settings.
