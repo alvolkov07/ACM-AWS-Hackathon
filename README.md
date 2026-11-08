@@ -15,6 +15,13 @@ The app remains usable without an AI key: service matching and email drafting us
 safe rule-based fallbacks. Configure Bedrock or Anthropic to enable AI-generated
 matching, drafts, and reports.
 
+Set `CLAUDE_TIER` to `haiku`, `sonnet`, or `opus` to choose the model family.
+Use `CLAUDE_MODEL` when your provider exposes a different model ID. Supplier
+locations are real cities and states, while the seeded supplier names and
+`.example.com` addresses are clearly demo data for the MVP. Ratings combine
+customer rating, review volume, reliability, and verification into a trust
+score; they are not claims about real businesses.
+
 Check the deployment with:
 
     curl http://localhost/api/health

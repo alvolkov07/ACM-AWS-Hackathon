@@ -513,10 +513,16 @@ function renderWorkflow(d){
   </div>`;
 }
 function companyRow(c){
+  const trust = Number(c.trust_score || c.rating || 0).toFixed(1);
+  const reviews = Number(c.review_count || 0).toLocaleString();
+  const verified = c.verified ? " · ✓ verified" : "";
   return `<label class="company">
     <input type="checkbox" class="co" value="${c._id}">
-    <span class="cinfo"><b>${esc(c.name)}</b><small>📍 ${esc(c.state)} · ${esc((c.services||[]).join(", "))}</small></span>
-    <span class="stars">⭐ ${c.rating}</span>
+    <span class="cinfo"><b>${esc(c.name)}</b><small>📍 ${esc(c.address || c.state)} · ${esc((c.services||[]).join(", "))}</small>
+      <small>⭐ ${Number(c.rating || 0).toFixed(1)} · ${reviews} reviews · trust ${trust}/5${verified}</small>
+      ${c.review_summary ? `<small>${esc(c.review_summary)}</small>` : ""}
+    </span>
+    <span class="stars">⭐ ${Number(c.rating || 0).toFixed(1)}</span>
   </label>`;
 }
 function emailCard(e){
