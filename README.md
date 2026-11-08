@@ -47,8 +47,10 @@ docker compose down
 
 ### Running Without Docker
 ```bash
+# Install all the project's requirements
 pip install -r requirements.txt
 
+# Run the app with all the fields passed directly.
 MONGO_URL="mongodb+srv://..." AWS_REGION=us-east-1 USE_BEDROCK=1 \
   CLAUDE_MODEL=anthropic.claude-3-5-haiku-20241022-v1:0 \
   uvicorn app.main:app --reload
