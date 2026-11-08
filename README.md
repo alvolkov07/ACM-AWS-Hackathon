@@ -31,6 +31,27 @@ Check the deployment with:
 
     curl http://localhost/api/health
 
+## Live EC2 host
+
+The current deployment is available at:
+
+    http://3.90.56.18
+
+This public IP can change if the EC2 instance is stopped and restarted. Allocate
+an Elastic IP in AWS if a stable address is needed.
+
+## Supplier search
+
+SerpAPI is the planned provider for finding suppliers online. Configure its key
+only in the uncommitted `.env` file:
+
+    SERPAPI_KEY=your-serpapi-key
+
+Search results must be filtered to the farm's resolved state. Supplier records
+should retain their source URL and retrieval date, include only publicly
+verifiable contact details, and never invent a business name, location, email
+address, rating, or review.
+
 ## Run without Docker
     pip install -r requirements.txt
     MONGO_URL="mongodb+srv://..." AWS_REGION=us-east-1 USE_BEDROCK=1 \
