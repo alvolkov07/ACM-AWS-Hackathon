@@ -68,7 +68,19 @@ address, rating, or review.
 7. Open the instance's public IPv4 address in a browser.
 
 ## Files
-- app/main.py          API + Claude calls + seed companies
+- app/main.py          FastAPI app: wires routers, startup, serves the front-end
+- app/config.py        environment settings, logging, Claude model selection
+- app/database.py      MongoDB connection and indexes
+- app/ai.py            Claude client and prompt helpers
+- app/security.py      password/token hashing, login dependency
+- app/schemas.py       request bodies and validation
+- app/geo.py           geocoding and distance
+- app/serpapi.py       SerpAPI search and place parsing
+- app/trust.py         supplier trust scoring
+- app/enrichment.py    reviews, contact emails, review summaries
+- app/suppliers.py     supplier search and caching
+- app/utils.py         shared helpers
+- app/routes/          API endpoints (auth, workflows, emails, health)
 - app/static/index.html  whole front-end
 - docker-compose.yml   API + MongoDB
 
